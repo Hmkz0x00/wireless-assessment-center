@@ -1,0 +1,29 @@
+{
+  "title": "Wireless Assessment Center",
+  "name": "wireless_assessment",
+  "description": "Target-centric wireless recon and assessment dashboard for authorized lab testing.",
+  "icon": "radio",
+  "author": {
+    "name": "Hamza",
+    "email": ""
+  },
+  "keywords": [
+    "wifi",
+    "recon",
+    "assessment",
+    "openwrt",
+    "security",
+    "pentest"
+  ],
+  "repository": "https://github.com/Hmkz0x00/wireless-assessment-center",
+  "bugs": "https://github.com/Hmkz0x00/wireless-assessment-center/issues",
+  "homepage": "https://github.com/Hmkz0x00/wireless-assessment-center",
+  "guestType": [
+    "OpenWrt"
+  ],
+  "dependencies": [],
+  "system": false,
+  "forceSidebar": true,
+  "version": "0.2.0",
+  "order": 20
+}

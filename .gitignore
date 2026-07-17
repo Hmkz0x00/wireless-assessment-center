@@ -1,0 +1,25 @@
+# Runtime data produced on the device (never commit — may contain real network data)
+storage/
+**/storage/database/
+*.pcap
+*.pcapng
+*.cap
+*.hccapx
+*.22000
+creds.log
+dns.log
+recon.json
+network_inventory.json
+
+# Node / build
+node_modules/
+dist/
+*.log
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.idea/
+.vscode/
