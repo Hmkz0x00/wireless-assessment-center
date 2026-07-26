@@ -33,6 +33,70 @@ and hcxtools pipelines, `nftables`, captive-portal internals, and how to wrap al
 safe, beginner-friendly control plane. Everything below runs on a single-core MIPS SoC with
 ~121 MB of RAM, which made resource discipline part of the problem.
 
+## Screenshots
+
+> The module running live on the Archer C7. **Network names (SSIDs), BSSIDs, and MAC
+> addresses are masked** in these images — the tooling only ever ran against the author's
+> own hardware, and no third-party network data is published.
+
+<p align="center">
+  <img src="docs/screenshots/01-overview.png" alt="Overview tab" width="100%"><br>
+  <sub><b>Overview</b> — tabbed workspace, live radio-mode control (Internet uplink vs. Lab), and tool readiness at a glance.</sub>
+</p>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+  <img src="docs/screenshots/02-recon.png" alt="Recon tab"><br>
+  <sub><b>Recon</b> — live dual-band scanner; only networks you mark as <i>Authorized</i> unlock the attack tools.</sub>
+</td>
+<td width="50%" valign="top">
+  <img src="docs/screenshots/03-capture.png" alt="Capture tab"><br>
+  <sub><b>Capture</b> — WPA handshake / PMKID capture with a tunable deauth cadence and capture history.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+  <img src="docs/screenshots/04-clientless.png" alt="Clientless tab"><br>
+  <sub><b>Clientless</b> — grabs a PMKID or handshake when a client (re)associates; drops straight into Crack Lab.</sub>
+</td>
+<td width="50%" valign="top">
+  <img src="docs/screenshots/05-wps.png" alt="WPS tab"><br>
+  <sub><b>WPS</b> — passive WPS discovery (beacon-IE parsing) and reaver / pixie-dust assessment.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+  <img src="docs/screenshots/06-beacon.png" alt="Beacon Harvesting tab"><br>
+  <sub><b>Beacon Harvesting</b> — passive AP + client collection (probe/PNL lists), no injection.</sub>
+</td>
+<td width="50%" valign="top">
+  <img src="docs/screenshots/07-evil-portal.png" alt="Evil Portal tab"><br>
+  <sub><b>Evil Portal</b> — open twin AP with captive-portal templates or internet-passthrough MITM.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+  <img src="docs/screenshots/08-rogue-ap-karma.png" alt="Rogue AP / KARMA tab"><br>
+  <sub><b>Rogue AP / KARMA</b> — PNL harvest and an evil-twin exposure test for devices you own.</sub>
+</td>
+<td width="50%" valign="top">
+  <img src="docs/screenshots/09-network-recon.png" alt="Network Recon tab"><br>
+  <sub><b>Network Recon</b> — nmap host discovery, port and service scans folded into a persistent inventory.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+  <img src="docs/screenshots/10-packet-intel.png" alt="Packet Intelligence tab"><br>
+  <sub><b>Packet Intelligence</b> — passive cleartext dissection: DNS, HTTP, cookies, and credentials sent in the clear.</sub>
+</td>
+<td width="50%" valign="top">
+  <img src="docs/screenshots/11-crack-lab.png" alt="Crack Lab tab"><br>
+  <sub><b>Crack Lab</b> — dictionary attacks, wordlist generation/upload, and a WPS default-PIN calculator.</sub>
+</td>
+</tr>
+</table>
+
 ## Features
 
 **Reconnaissance**
