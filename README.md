@@ -158,24 +158,39 @@ management, and safety mechanics fit together.
 - The wireless toolchain available as OpenWrt packages: `aircrack-ng`, `hcxdumptool`,
   `hcxtools`, `reaver`, `pixiewps`, `hostapd-utils`, `dnsmasq`, `tcpdump`, `nftables`.
 
-## Install / deploy
+## Install
 
-This repo contains the module source. Deploy it into a working Frieren install:
+If you already run [Frieren](https://github.com/xchwarze/frieren), this installs as a drop-in
+module — Frieren auto-discovers any folder with a `manifest.json` under its modules root. The
+ready-to-install folder is `dist/wireless_assessment/` (just the three files the device needs).
 
 ```bash
 git clone https://github.com/Hmkz0x00/wireless-assessment-center.git
 cd wireless-assessment-center
 
-# Rebuild the frontend bundle if you edit the UI source:
-node --check src/module.umd.source.js
-gzip -9 -n -c src/module.umd.source.js > src/module.umd.js
+# 1. Install the tool dependencies on the device (once):
+#    opkg update && opkg install aircrack-ng hcxdumptool hcxtools reaver pixiewps \
+#        hostapd-utils dnsmasq tcpdump nftables nmap iw kmod-tun
 
-# Copy the module onto the device (adjust host):
-scp src/Wireless_assessmentController.php src/module.umd.js src/manifest.json \
-    root@192.168.1.1:/usr/share/frieren/modules/wireless_assessment/
+# 2. Copy the module folder onto the device (name must stay "wireless_assessment"):
+scp -r dist/wireless_assessment root@ROUTER_IP:/frieren/modules/
 ```
 
-Then open the Frieren web UI and select **Wireless Assessment Center** from the sidebar.
+Reload the panel — **Wireless Assessment Center** appears in the sidebar (and on the Modules
+page). Prefer no-scp, SD-card, or on-device `wget` installs? See the full, step-by-step
+**[installation guide → `docs/INSTALL.md`](docs/INSTALL.md)** (covers dependencies, storage
+options, uninstall, and troubleshooting).
+
+> Not in the panel's one-click "Available modules" list because that catalog serves only the
+> official upstream modules; third-party modules install manually as above.
+
+If you edit the UI source, rebuild the bundle and repackage:
+
+```bash
+node --check src/module.umd.source.js
+gzip -9 -n -c src/module.umd.source.js > src/module.umd.js
+sh scripts/package.sh        # refreshes dist/wireless_assessment/ + tarball
+```
 
 ## Project structure
 
@@ -185,7 +200,12 @@ src/
   module.umd.source.js               # React frontend (authored source)
   module.umd.js                      # gzipped bundle served by the device
   manifest.json                      # Frieren module manifest
+dist/
+  wireless_assessment/               # ready-to-install module folder (drop into /frieren/modules/)
+scripts/
+  package.sh                         # assembles dist/ + tarball from src/
 docs/
+  INSTALL.md                         # step-by-step install guide for existing Frieren users
   ARCHITECTURE.md                    # design, job model, radio management, safety mechanics
 ```
 

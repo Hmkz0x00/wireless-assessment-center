@@ -13,7 +13,9 @@ network_inventory.json
 
 # Node / build
 node_modules/
-dist/
+# ship the ready-to-install module folder (dist/wireless_assessment/) but not
+# the generated tarball
+dist/*.tar.gz
 *.log
 
 # OS / editor cruft
