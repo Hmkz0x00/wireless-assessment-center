@@ -177,9 +177,11 @@ scp -r dist/wireless_assessment root@ROUTER_IP:/frieren/modules/
 ```
 
 Reload the panel — **Wireless Assessment Center** appears in the sidebar (and on the Modules
-page). Prefer no-scp, SD-card, or on-device `wget` installs? See the full, step-by-step
-**[installation guide → `docs/INSTALL.md`](docs/INSTALL.md)** (covers dependencies, storage
-options, uninstall, and troubleshooting).
+page). Prefer a single-file install? Grab the prebuilt tarball from the
+[**latest release**](https://github.com/Hmkz0x00/wireless-assessment-center/releases/latest)
+and `tar -xzC /frieren/modules -f wireless_assessment-*.tar.gz` on the device. The full,
+step-by-step **[installation guide → `docs/INSTALL.md`](docs/INSTALL.md)** covers every method
+(scp, on-device `wget`, SD-card), dependencies, uninstall, and troubleshooting.
 
 > Not in the panel's one-click "Available modules" list because that catalog serves only the
 > official upstream modules; third-party modules install manually as above.

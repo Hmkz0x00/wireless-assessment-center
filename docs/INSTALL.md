@@ -75,9 +75,19 @@ wget -O Wireless_assessmentController.php  "$BASE/Wireless_assessmentController.
 wget -O module.umd.js                      "$BASE/module.umd.js"
 ```
 
-### Method C — tarball
+### Method C — prebuilt release tarball (single file, on-device)
 
-Build the tarball on your computer, then extract it into the modules root on the device:
+Grab the tarball from the latest
+[release](https://github.com/Hmkz0x00/wireless-assessment-center/releases/latest) directly on
+the device and extract it into the modules root:
+
+```sh
+cd /tmp
+wget https://github.com/Hmkz0x00/wireless-assessment-center/releases/download/v0.2.0/wireless_assessment-0.2.0.tar.gz
+tar -xzC /frieren/modules -f wireless_assessment-0.2.0.tar.gz
+```
+
+Prefer to build the tarball yourself from source instead of downloading it?
 
 ```sh
 sh scripts/package.sh            # produces dist/wireless_assessment.tar.gz
