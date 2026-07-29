@@ -30,6 +30,29 @@ The frontend never talks to system tools directly. Every capability is an action
 controller, and the controller is the only place that touches the radios, the packet
 tools, or the firewall.
 
+## Backend code organization
+
+The controller owns everything stateful — the endpoint routes, the job lifecycle, and all
+access to the radios/UCI/firewall. Everything that *doesn't* need that state is factored out
+into small, stateless helper classes so the controller stays readable and the device parses
+less code per request:
+
+| Helper class       | Responsibility                                                        |
+|--------------------|-----------------------------------------------------------------------|
+| `WaParsers`        | Parse tool output — `iw`/`iwinfo`/`airodump` scans, reaver/WPS-IE, radiotap, tcpdump dissection |
+| `WaValidators`     | Input-safety validators (BSSID/iface/job-id/RFC1918) + MAC/format utilities |
+| `WaVendorLookup`   | OUI → vendor-name enrichment for every AP/client MAC                   |
+| `WaWordlists`      | Wordlist generation and WPS default-PIN computation                   |
+| `WaTemplates`      | Static HTML/CSS for captive-portal and MITM awareness pages           |
+| `WaSystemInfo`     | System / hardware / wireless-interface introspection and static config |
+
+Each helper is a class of `public static` methods under the module's namespace, so Frieren's
+PSR-4 autoloader resolves `frieren\modules\wireless_assessment\WaParsers` straight to
+`WaParsers.php` — no registration, and the file is only `require`d the first time an action
+actually references it. A lightweight call like `moduleStatus` therefore never parses the
+handshake/WPS/sniff parsers or the wordlist generators at all. On the single-core MIPS SoC this
+project targets, that on-demand parsing is a deliberate, measurable win.
+
 ## Request / response model
 
 Frieren dispatches a POST whose body names a `module` and an `action`. The controller

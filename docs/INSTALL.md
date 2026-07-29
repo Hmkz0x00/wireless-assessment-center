@@ -5,8 +5,9 @@ discovers any folder that contains a `manifest.json` under its modules root, so 
 is a drop-in: put the module folder on the device, install the tool dependencies, and reload
 the panel.
 
-The module is self-contained — three files (`manifest.json`, the PHP controller, and the
-gzipped UMD frontend bundle) — and needs no build step on the device.
+The module is self-contained — `manifest.json`, the PHP controller and its backend helper
+classes (`Wa*.php`, autoloaded on demand by Frieren's PSR-4 fallback), and the gzipped UMD
+frontend bundle — and needs no build step on the device.
 
 ---
 
@@ -73,7 +74,15 @@ BASE=https://raw.githubusercontent.com/Hmkz0x00/wireless-assessment-center/main/
 wget -O manifest.json                     "$BASE/manifest.json"
 wget -O Wireless_assessmentController.php  "$BASE/Wireless_assessmentController.php"
 wget -O module.umd.js                      "$BASE/module.umd.js"
+# backend helper classes (required — the controller autoloads them)
+for h in WaParsers WaValidators WaVendorLookup WaWordlists WaTemplates WaSystemInfo; do
+    wget -O "$h.php" "$BASE/$h.php"
+done
 ```
+
+> Prefer the folder or tarball methods (A / C) — they grab every file in one step, so you can't
+> miss a helper class. If you do fetch files individually, all six `Wa*.php` helpers must be
+> present or the controller will fatal on first use.
 
 ### Method C — prebuilt release tarball (single file, on-device)
 

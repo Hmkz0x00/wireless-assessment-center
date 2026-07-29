@@ -7,8 +7,9 @@ cracking, rogue-AP / captive-portal exercises, and on-device MITM/DNS analysis �
 from a single web dashboard.
 
 Built as a native module for the [Frieren](https://github.com/xchwarze/frieren) OpenWrt
-pentest framework: a ~5,900-line PHP backend and a ~3,400-line React frontend exposing
-~45 API actions.
+pentest framework: a PHP backend — a ~4,600-line controller plus six focused helper classes
+(parsers, validators, wordlist/PIN generation, templates, vendor lookup, system info) — and a
+~3,400-line React frontend exposing ~45 API actions.
 
 > ### ⚠️ Legal & authorized-use notice
 >
@@ -162,7 +163,8 @@ management, and safety mechanics fit together.
 
 If you already run [Frieren](https://github.com/xchwarze/frieren), this installs as a drop-in
 module — Frieren auto-discovers any folder with a `manifest.json` under its modules root. The
-ready-to-install folder is `dist/wireless_assessment/` (just the three files the device needs).
+ready-to-install folder is `dist/wireless_assessment/` (the manifest, the PHP controller and its
+helper classes, and the gzipped UI bundle — the only files the device needs).
 
 ```bash
 git clone https://github.com/Hmkz0x00/wireless-assessment-center.git
@@ -199,6 +201,12 @@ sh scripts/package.sh        # refreshes dist/wireless_assessment/ + tarball
 ```
 src/
   Wireless_assessmentController.php   # PHP backend — ~45 API actions, job engine, tool wiring
+  WaParsers.php                      # helper: tool-output parsers (iw/iwinfo/airodump/reaver/tcpdump)
+  WaValidators.php                   # helper: input-safety validators + MAC/format utilities
+  WaVendorLookup.php                 # helper: OUI -> vendor enrichment
+  WaWordlists.php                    # helper: wordlist generation + WPS default-PIN computation
+  WaTemplates.php                    # helper: captive-portal / MITM awareness page HTML
+  WaSystemInfo.php                   # helper: system / hardware / wireless-interface introspection
   module.umd.source.js               # React frontend (authored source)
   module.umd.js                      # gzipped bundle served by the device
   manifest.json                      # Frieren module manifest
@@ -210,6 +218,10 @@ docs/
   INSTALL.md                         # step-by-step install guide for existing Frieren users
   ARCHITECTURE.md                    # design, job model, radio management, safety mechanics
 ```
+
+The controller is intentionally lean: cohesive, stateless helpers live in `Wa*.php` classes
+and are pulled in on demand by Frieren's PSR-4 autoloader (class name = file name), so a light
+request never parses code it doesn't use.
 
 ## Status
 
